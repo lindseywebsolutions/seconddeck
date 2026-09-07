@@ -38,6 +38,11 @@ describe('SecondDeck API', () => {
     expect(response.body[0].target.package_name).toBe('com.lindseywebsolutions.seconddeck');
   });
 
+  it('advertises the portable Deck contract', async () => {
+    const response = await request(app).get('/api/config').expect(200);
+    expect(response.body).toMatchObject({ deckSchemaVersion: 1, deckFileFormats: ['json', 'yaml'], maxDeckFileBytes: 65_536 });
+  });
+
   it('derives the AI provider from the authenticated email', async () => {
     const publicToken = await login('friend@example.com');
     const publicResult = await request(app).post('/api/assistant').set('authorization', `Bearer ${publicToken}`).send({ prompt: 'Make a timer' }).expect(200);
@@ -61,6 +66,7 @@ describe('SecondDeck API', () => {
     const authorToken = await login('creator@example.com');
     const submitted = await request(app).post('/api/decks').set('authorization', `Bearer ${authorToken}`).send(manifest).expect(201);
     expect(submitted.body.deck.status).toBe('review');
+    expect(submitted.body.deck.version).toBe(1);
     await request(app).post(`/api/decks/${submitted.body.deck.id}/review`).set('authorization', `Bearer ${authorToken}`).send({ status: 'published' }).expect(403);
 
     const reviewerToken = await login('reviewer@lindseywebsolutions.com');
@@ -70,6 +76,35 @@ describe('SecondDeck API', () => {
 
     const viewerToken = await login('viewer@example.com');
     const catalog = await request(app).get('/api/decks').set('authorization', `Bearer ${viewerToken}`).expect(200);
-    expect(catalog.body.decks.find((deck) => deck.id === submitted.body.deck.id)?.status).toBe('published');
+    const publicDeck = catalog.body.decks.find((deck) => deck.id === submitted.body.deck.id);
+    expect(publicDeck?.status).toBe('published');
+    expect(publicDeck).toMatchObject({ publisher: 'Community' });
+    expect(publicDeck.author).toBeUndefined();
+
+    await request(app).post('/api/decks').set('authorization', `Bearer ${authorToken}`).send({ ...manifest, version: 1 }).expect(409);
+    const revision = await request(app).post('/api/decks').set('authorization', `Bearer ${authorToken}`).send({ ...manifest, version: 2, description: 'A safer second revision of the community route and checklist.' }).expect(201);
+    expect(revision.body.deck.channelId).toBe(submitted.body.deck.channelId);
+    const catalogDuringReview = await request(app).get('/api/decks').set('authorization', `Bearer ${viewerToken}`).expect(200);
+    expect(catalogDuringReview.body.decks.find((deck) => deck.slug === manifest.slug)?.version).toBe(1);
+    await request(app).post(`/api/decks/${revision.body.deck.id}/review`).set('authorization', `Bearer ${reviewerToken}`).send({ status: 'published' }).expect(200);
+    const updatedCatalog = await request(app).get('/api/decks').set('authorization', `Bearer ${viewerToken}`).expect(200);
+    expect(updatedCatalog.body.decks.filter((deck) => deck.slug === manifest.slug).map((deck) => deck.version)).toEqual([2]);
+  });
+
+  it('serializes concurrent revisions on one stable channel', async () => {
+    const token = await login('parallel@example.com');
+    const manifest = {
+      schemaVersion: 1, kind: 'deck', version: 1, slug: 'parallel-route', name: 'Parallel Route',
+      description: 'A versioned Deck used to verify serialized community updates.',
+      target: { packageNames: ['org.example.parallel'], platforms: ['android'], deviceProfiles: ['ayn-thor'] },
+      layout: { columns: 1, breakpoints: [], widgets: [{ id: 'notes', type: 'notes', title: 'Notes' }] },
+      permissions: ['external-display'], sources: [], ai: { enabled: false }
+    };
+    await request(app).post('/api/decks').set('authorization', `Bearer ${token}`).send(manifest).expect(201);
+    const attempts = await Promise.all([
+      request(app).post('/api/decks').set('authorization', `Bearer ${token}`).send({ ...manifest, version: 2 }),
+      request(app).post('/api/decks').set('authorization', `Bearer ${token}`).send({ ...manifest, version: 2 })
+    ]);
+    expect(attempts.map((response) => response.status).sort()).toEqual([201, 409]);
   });
 });

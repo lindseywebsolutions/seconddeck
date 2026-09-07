@@ -26,8 +26,9 @@ export function createApp({ config, authService, aiService, deckStore, mailer })
     catch { res.status(503).json({ status: 'not-ready', email: 'unavailable' }); }
   });
   app.get('/api/config', (_req, res) => res.json({
-    name: 'SecondDeck', version: process.env.APP_VERSION || '0.3.0', login: 'email-code', widgetTypes,
-    downloadUrl: `${config.publicUrl}/downloads/seconddeck-v${process.env.APP_VERSION || '0.3.0'}.apk`,
+    name: 'SecondDeck', version: process.env.APP_VERSION || '0.4.0', login: 'email-code', widgetTypes,
+    deckSchemaVersion: 1, deckFileFormats: ['json', 'yaml'], maxDeckFileBytes: 65_536,
+    downloadUrl: `${config.publicUrl}/downloads/seconddeck-v${process.env.APP_VERSION || '0.4.0'}.apk`,
     obtainiumSourceUrl: config.publicUrl
   }));
 
@@ -81,6 +82,7 @@ export function createApp({ config, authService, aiService, deckStore, mailer })
   app.use(express.static(path.join(root, 'dist'), { maxAge: '1h' }));
   app.get('/{*path}', (_req, res) => res.sendFile(path.join(root, 'dist/index.html')));
   app.use((error, _req, res, _next) => {
+    if (Number.isInteger(error.statusCode) && error.statusCode >= 400 && error.statusCode < 500) return res.status(error.statusCode).json({ error: error.message });
     console.error(JSON.stringify({ level: 'error', message: error.message }));
     res.status(503).json({ error: 'SecondDeck could not complete that request.' });
   });

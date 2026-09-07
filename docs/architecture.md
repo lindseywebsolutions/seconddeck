@@ -19,6 +19,9 @@
   corporate review/publishing, and server-side AI routing.
 - A Longhorn PVC persists submitted Decks. Published Decks are seeded and can
   later move to a reviewed Git-backed catalog without changing the schema.
+  Immutable revisions share a stable channel ID; publishing an update
+  supersedes its prior public revision without hiding that prior revision while
+  review is pending.
 - Reviewed Decks are installed into device-local storage. The selected Deck is
   passed to the secondary display as data and renders offline; notes and
   checklist state and timer state stay on the device. A narrowly scoped native
@@ -49,6 +52,12 @@ that private in-pod directory, which is discarded when the pod is replaced.
   Required widget capabilities and the source allowlist are enforced, and
   unknown executable fields are rejected. Only verified corporate accounts can
   publish or reject a community submission.
+- Portable JSON/YAML import is capped at 64 KiB, rejects YAML aliases and
+  duplicate keys, and runs the same strict schema used by the server. Export
+  includes only manifest fields and strips account and review metadata.
+- Creator email addresses remain available to the creator and corporate review
+  queue but are replaced with a neutral publisher label in the community
+  catalog response.
 - Public users never reach Codex; company users never silently fall back to
   Ollama. Provider selection uses only the verified session email.
 - The production pod runs as non-root with a read-only root filesystem, a

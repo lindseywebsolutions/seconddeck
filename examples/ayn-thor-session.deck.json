@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "deck",
+  "version": 1,
   "slug": "ayn-thor-session",
   "name": "AYN Thor Session Deck",
   "description": "An offline route map, checklist, persistent timer, notes, and read-only device telemetry.",

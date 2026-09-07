@@ -15,6 +15,7 @@ const widgetSchema = z.object({
 export const deckSchema = z.object({
   schemaVersion: z.literal(1),
   kind: z.enum(['deck', 'layout', 'widget-preset', 'theme', 'compatibility-profile']).default('deck'),
+  version: z.number().int().min(1).max(1_000_000).default(1),
   slug: z.string().regex(/^[a-z0-9-]{3,64}$/),
   name: z.string().trim().min(3).max(80),
   description: z.string().trim().min(10).max(500),

@@ -11,7 +11,7 @@ function memoryStorage() {
 }
 
 const first = {
-  id: 'deck-one', name: 'Field Notes', status: 'published',
+  id: 'deck-one-v1', channelId: 'deck-one', version: 1, name: 'Field Notes', status: 'published',
   layout: { columns: 2, widgets: [{ id: 'notes', type: 'notes', title: 'Notes', content: 'Café route' }] }
 };
 const second = {
@@ -24,12 +24,13 @@ describe('local Deck runtime', () => {
     const storage = memoryStorage();
     installDeck(first, storage);
     installDeck(second, storage);
-    installDeck({ ...first, name: 'Updated Field Notes' }, storage);
+    installDeck({ ...first, id: 'deck-one-v2', version: 2, name: 'Updated Field Notes' }, storage);
     expect(installedDecks(storage).map((deck) => deck.name)).toEqual(['Timer Deck', 'Updated Field Notes']);
-    expect(activeDeck(storage).id).toBe('deck-one');
+    expect(activeDeck(storage).id).toBe('deck-one-v2');
     expect(setActiveDeck('deck-two', storage).name).toBe('Timer Deck');
     uninstallDeck('deck-two', storage);
-    expect(activeDeck(storage).id).toBe('deck-one');
+    expect(activeDeck(storage).id).toBe('deck-one-v2');
+    expect(() => installDeck(first, storage)).toThrow('newer revision');
   });
 
   it('round-trips Unicode Deck data through the secondary-display payload', () => {

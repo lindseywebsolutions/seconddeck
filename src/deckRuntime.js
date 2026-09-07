@@ -12,6 +12,10 @@ function store(storage) {
   throw new Error('Local Deck storage is unavailable.');
 }
 
+function identity(deck) {
+  return String(deck?.channelId || deck?.id || '');
+}
+
 export function installedDecks(storage) {
   const value = parse(store(storage).getItem(installedKey), []);
   return Array.isArray(value) ? value.filter((deck) => deck && typeof deck.id === 'string') : [];
@@ -20,19 +24,24 @@ export function installedDecks(storage) {
 export function installDeck(deck, storage) {
   if (!deck || typeof deck.id !== 'string' || !deck.layout?.widgets?.length) throw new Error('This Deck cannot be installed.');
   const target = store(storage);
-  const decks = installedDecks(target).filter((item) => item.id !== deck.id);
+  const deckId = identity(deck);
+  const current = installedDecks(target).find((item) => identity(item) === deckId);
+  if (current && Number(deck.version || 1) < Number(current.version || 1)) throw new Error('A newer revision of this Deck is already installed.');
+  const decks = installedDecks(target).filter((item) => identity(item) !== deckId);
   decks.push(deck);
   target.setItem(installedKey, JSON.stringify(decks));
-  if (!target.getItem(activeKey)) target.setItem(activeKey, deck.id);
+  if (!target.getItem(activeKey) || target.getItem(activeKey) === current?.id) target.setItem(activeKey, deckId);
   return decks;
 }
 
 export function uninstallDeck(id, storage) {
   const target = store(storage);
-  const decks = installedDecks(target).filter((deck) => deck.id !== id);
+  const currentDecks = installedDecks(target);
+  const removed = currentDecks.find((deck) => deck.id === id || identity(deck) === id);
+  const decks = currentDecks.filter((deck) => deck !== removed);
   target.setItem(installedKey, JSON.stringify(decks));
-  if (target.getItem(activeKey) === id) {
-    if (decks[0]) target.setItem(activeKey, decks[0].id);
+  if (removed && [removed.id, identity(removed)].includes(target.getItem(activeKey))) {
+    if (decks[0]) target.setItem(activeKey, identity(decks[0]));
     else target.removeItem(activeKey);
   }
   return decks;
@@ -40,16 +49,16 @@ export function uninstallDeck(id, storage) {
 
 export function setActiveDeck(id, storage) {
   const target = store(storage);
-  const deck = installedDecks(target).find((item) => item.id === id);
+  const deck = installedDecks(target).find((item) => item.id === id || identity(item) === id);
   if (!deck) throw new Error('Install this Deck before making it active.');
-  target.setItem(activeKey, id);
+  target.setItem(activeKey, identity(deck));
   return deck;
 }
 
 export function activeDeck(storage) {
   const target = store(storage);
   const id = target.getItem(activeKey);
-  return installedDecks(target).find((deck) => deck.id === id) || null;
+  return installedDecks(target).find((deck) => deck.id === id || identity(deck) === id) || null;
 }
 
 export function deckForPackage(packageName, decks) {

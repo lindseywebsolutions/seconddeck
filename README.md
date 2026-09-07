@@ -48,11 +48,12 @@ signing keystore.
 
 ## Status
 
-Version 0.3.0 includes the public homepage, authenticated community library,
+Version 0.4.0 includes the public homepage, authenticated community library,
 Thor-friendly creator and corporate review queue, strict schema validation,
 local Deck installation/selection, a manifest-driven offline companion runtime,
 text maps, persistent timers, read-only device telemetry, explicit companion
-stop controls, AI routing, opt-in exact-package game detection, native
+stop controls, versioned reviewed updates, strict JSON/YAML portability,
+on-device draft preview/install, AI routing, opt-in exact-package game detection, native
 secondary-display presentation, Vault-backed ChatGPT authentication for the
 corporate Codex lane, Kubernetes manifests, and Obtainium-compatible APK hosting.
 Device-specific display arbitration remains a physical AYN Thor acceptance gate;

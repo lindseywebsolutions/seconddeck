@@ -11,6 +11,8 @@ for a complete example.
 ## Required identity and target fields
 
 - `schemaVersion` is currently `1`.
+- `version` is a positive integer. A revision must be newer than every prior
+  submission by the same author with the same slug.
 - `kind` is `deck`, `layout`, `widget-preset`, `theme`, or
   `compatibility-profile`.
 - `slug`, `name`, and `description` identify the artifact.
@@ -43,6 +45,19 @@ widget with `sourceUrl` declares `network`. Each widget source must also appear
 in the top-level `sources` allowlist. Only HTTP(S) sources pass validation.
 
 These declarations are enforced by the server. They are not advisory metadata.
+
+## Portable files and reviewed updates
+
+The Thor creator can validate and install a draft locally before submitting it.
+The library accepts strict JSON and YAML files up to 64 KiB and exports a
+canonical JSON manifest without author email, review state, timestamps, or
+other server metadata. YAML aliases and duplicate keys are rejected.
+
+The first submission creates a stable update channel. Later versions are stored
+as immutable review records. The currently published revision remains visible
+until a reviewer publishes the update; publishing it supersedes the prior
+revision. Installed devices compare versions on that stable channel and offer
+an explicit update instead of silently changing the active Deck.
 
 ## AI
 

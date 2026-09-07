@@ -3,9 +3,10 @@ import { api, clearToken, getCachedProfile, getToken, setCachedProfile, setToken
 import { closeCompanionDisplay, getDisplayState, openCompanionDisplay, requestGameDetectionAccess } from './native.js';
 import { activeDeck, deckForPackage, deckFromLocation, installDeck, installedDecks, setActiveDeck, uninstallDeck } from './deckRuntime.js';
 import { formatBytes, formatDuration, normalizePerformanceSnapshot, readTimerState, timerElapsed, toggleTimer } from './companionRuntime.js';
+import { hasDeckUpdate, installedRevision, localDeck, mergeCatalogWithInstalled, parsePortableDeck, portableDeck, serializeDeck } from './deckPortability.js';
 
 const root = document.querySelector('#app');
-const state = { user: null, decks: [], installed: [], activeDeck: null, detectedDeck: null, display: null, config: null, offline: false };
+const state = { user: null, decks: [], installed: [], activeDeck: null, detectedDeck: null, previewDeck: null, display: null, config: null, offline: false };
 const isCompanionMode = new URLSearchParams(location.search).get('mode') === 'companion';
 
 const icon = (name) => ({
@@ -98,8 +99,12 @@ function wireCompanionState(deck) {
   });
 }
 
-function companion() {
+async function companion() {
   document.documentElement.classList.add('companion-mode');
+  if (location.protocol !== 'file:' && !(await getToken())) {
+    location.replace(`${location.pathname}#/login`);
+    return;
+  }
   const deck = deckFromLocation(location);
   if (!deck) {
     root.innerHTML = `<main class="companion-locked">${icon('shield')}<h1>No active Deck</h1><p>Return to SecondDeck, sign in, install a reviewed Deck, and choose <strong>Use on second screen</strong>.</p></main>`;
@@ -120,7 +125,7 @@ function home() {
     <section class="hero"><div class="eyebrow"><span></span> Built first for AYN Thor</div>
       <h1>Your game up top.<br><em>Everything else below.</em></h1>
       <p class="lede">SecondDeck turns the screen you are not playing on into a living companion—maps, guides, notes, persistent timers, read-only device telemetry, and community-built Decks that stay out of your way.</p>
-      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="obtainium://app/%7B%22id%22%3A%22com.lindseywebsolutions.seconddeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLindseyWebSolutions%2Fseconddeck%22%2C%22author%22%3A%22Lindsey%20Web%20Solutions%22%2C%22name%22%3A%22SecondDeck%22%7D">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.3.0.apk'}">Download APK</a></div>
+      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="obtainium://app/%7B%22id%22%3A%22com.lindseywebsolutions.seconddeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLindseyWebSolutions%2Fseconddeck%22%2C%22author%22%3A%22Lindsey%20Web%20Solutions%22%2C%22name%22%3A%22SecondDeck%22%7D">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.4.0.apk'}">Download APK</a></div>
       <p class="obtainium">On your Thor? Use <strong>Add to Obtainium</strong> so the source is saved as SecondDeck, or install the signed APK directly.</p>
       <div class="device"><div class="screen screen-top"><div class="game-art"><span>NOW PLAYING</span><strong>YOUR GAME</strong></div></div><div class="hinge"></div><div class="screen screen-bottom"><div class="deck-preview"><div class="mini-card teal">ROUTE<small>North ridge → tower</small></div><div class="mini-card amber">TIMER<small>01:42:18</small></div><div class="mini-card wide">SESSION NOTES<small>Key found · East gate unlocked</small></div></div></div></div>
     </section>
@@ -129,8 +134,9 @@ function home() {
       <article>${icon('shield')}<h3>Safe by design</h3><p>Decks are validated data—not executable plugins. You decide every permission.</p></article>
       <article>${icon('spark')}<h3>AI, with a local lane</h3><p>Private Ollama assistance for community accounts; Codex for verified LWS members.</p></article>
     </div></section>
-    <section id="community" class="community"><div><span class="section-num">02 / COMMUNITY</span><h2>Build on the device<br>you actually play on.</h2><p>Create a Deck from your Thor, preview it instantly, then submit it for review. No laptop and no native code required.</p><a class="button ghost" href="#/create">Start a Deck ${icon('plus')}</a></div><div class="manifest"><div class="manifest-head"><i></i><i></i><i></i><span>deck.json</span></div><pre>{
+    <section id="community" class="community"><div><span class="section-num">02 / COMMUNITY</span><h2>Build on the device<br>you actually play on.</h2><p>Create, preview, install, import, and export a versioned Deck from your Thor, then submit it for review. No laptop and no native code required.</p><a class="button ghost" href="#/create">Start a Deck ${icon('plus')}</a></div><div class="manifest"><div class="manifest-head"><i></i><i></i><i></i><span>deck.json</span></div><pre>{
   <b>"schemaVersion"</b>: 1,
+  <b>"version"</b>: 1,
   <b>"target"</b>: {
     "packageNames": ["your.game"]
   },
@@ -166,21 +172,25 @@ async function verifyCode(event) {
 
 function deckCard(deck) {
   const widgetNames = deck.layout.widgets.slice(0, 4).map((widget) => `<span>${escapeHtml(widget.type)}</span>`).join('');
-  const installed = state.installed.some((item) => item.id === deck.id);
-  const active = state.activeDeck?.id === deck.id;
+  const localRevision = installedRevision(deck, state.installed);
+  const installed = Boolean(localRevision);
+  const updateAvailable = hasDeckUpdate(deck, state.installed);
+  const active = installedRevision(deck, state.activeDeck ? [state.activeDeck] : []) !== null;
   const canReview = state.user?.aiProvider === 'codex';
   const action = deck.status === 'review'
     ? canReview
       ? `<span class="review-actions"><button class="text-button" data-action="review" data-review-status="rejected" data-deck-id="${escapeHtml(deck.id)}">Reject</button><button class="text-button" data-action="review" data-review-status="published" data-deck-id="${escapeHtml(deck.id)}">Publish</button></span>`
       : '<span class="review-note">Awaiting review</span>'
-    : deck.status !== 'published'
+    : !['published', 'local'].includes(deck.status)
       ? `<span class="review-note">${escapeHtml(deck.status)}</span>`
+    : updateAvailable
+      ? `<button class="text-button" data-action="install" data-deck-id="${escapeHtml(deck.id)}">Update to v${escapeHtml(deck.version || 1)} ↓</button>`
     : active
       ? `<button class="text-button active-action" data-action="display" data-deck-id="${escapeHtml(deck.id)}">Launch ↗</button>`
       : installed
         ? `<button class="text-button" data-action="activate" data-deck-id="${escapeHtml(deck.id)}">Use on second screen →</button>`
         : `<button class="text-button" data-action="install" data-deck-id="${escapeHtml(deck.id)}">Install locally ↓</button>`;
-  return `<article class="deck-card"><div class="deck-art"><div>${widgetNames}</div></div><div class="deck-copy"><small>${escapeHtml(deck.target.platforms.join(' · '))}</small><h3>${escapeHtml(deck.name)}</h3><p>${escapeHtml(deck.description)}</p><div><span class="status ${escapeHtml(deck.status)}">${active ? 'active' : installed ? 'installed' : escapeHtml(deck.status)}</span><button class="text-button" data-action="preview" data-deck-id="${escapeHtml(deck.id)}">Preview</button></div><div class="deck-action">${action}</div></div></article>`;
+  return `<article class="deck-card" data-deck-search="${escapeHtml([deck.name, deck.description, ...(deck.target?.packageNames || [])].join(' ').toLowerCase())}"><div class="deck-art"><div>${widgetNames}</div></div><div class="deck-copy"><small>${escapeHtml(deck.target.platforms.join(' · '))} · v${escapeHtml(deck.version || 1)}</small><h3>${escapeHtml(deck.name)}</h3><p>${escapeHtml(deck.description)}</p><div><span class="status ${escapeHtml(updateAvailable ? 'update' : deck.status)}">${updateAvailable ? 'update available' : active ? 'active' : installed ? 'installed' : escapeHtml(deck.status)}</span><button class="text-button" data-action="preview" data-deck-id="${escapeHtml(deck.id)}">Preview</button></div><div class="deck-action">${action}</div></div></article>`;
 }
 
 async function appPage() {
@@ -188,37 +198,62 @@ async function appPage() {
   const runtimeMessage = state.detectedDeck ? `${state.detectedDeck.name} matched to ${state.display.foregroundPackage}` : state.display?.foregroundPackage ? `No installed Deck matches ${state.display.foregroundPackage}` : state.display?.usageAccessGranted ? 'Waiting for a supported game' : state.display?.native ? 'Game detection is off' : 'Web preview';
   root.innerHTML = pageShell(`<main class="dashboard"><section class="dash-head"><div><span class="eyebrow"><span></span> ${escapeHtml(state.user.email)}</span><h1>Your second screen,<br>ready when you are.</h1></div><button class="button" data-action="display" ${state.activeDeck ? '' : 'disabled'}>${state.activeDeck ? `Launch ${escapeHtml(state.activeDeck.name)}` : 'Install a Deck to launch'}</button></section>
     <div class="device-status" id="device-status"><span class="pulse"></span><strong>${state.offline ? 'Offline library ready' : state.display?.companionVisible ? 'Companion is running' : state.display?.isExtended ? 'Second display detected' : 'Ready for a second display'}</strong><span>${escapeHtml(runtimeMessage)} · ${state.installed.length} installed · ${state.decks.length} available</span><span class="device-actions">${state.display?.native && !state.display?.usageAccessGranted ? '<button class="text-button" data-action="usage-access">Enable game detection</button>' : ''}${state.display?.companionVisible ? '<button class="text-button stop" data-action="stop-display">Stop companion</button>' : ''}</span></div>
-    <section><div class="section-title"><div><span class="section-num">COMMUNITY LIBRARY</span><h2>Reviewed Decks</h2></div><a class="button ghost small" href="#/create">${icon('plus')} Create Deck</a></div><div class="deck-grid">${state.decks.map(deckCard).join('') || '<p class="empty-library">You are offline. Installed Decks remain available after the catalog reconnects.</p>'}</div></section></main>`, true);
+    <section><div class="section-title"><div><span class="section-num">COMMUNITY LIBRARY</span><h2>Reviewed and local Decks</h2></div><div class="library-actions"><button class="button ghost small" data-action="import-deck">Import JSON/YAML</button><a class="button ghost small" href="#/create">${icon('plus')} Create Deck</a><input id="deck-import" type="file" accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml" hidden></div></div><label class="library-search">Find a game or Deck<input id="deck-search" type="search" placeholder="Search name, description, or package…"></label><div class="deck-grid">${state.decks.map(deckCard).join('') || '<p class="empty-library">You are offline. Installed Decks remain available after the catalog reconnects.</p>'}</div></section></main>`, true);
+  document.querySelector('#deck-search')?.addEventListener('input', filterDecks);
+}
+
+function filterDecks(event) {
+  const query = String(event.currentTarget.value || '').trim().toLowerCase();
+  document.querySelectorAll('[data-deck-search]').forEach((card) => { card.hidden = Boolean(query && !card.dataset.deckSearch.includes(query)); });
 }
 
 function findDeck(id) {
-  return state.decks.find((deck) => deck.id === id) || state.installed.find((deck) => deck.id === id);
+  return state.decks.find((deck) => deck.id === id) || state.installed.find((deck) => deck.id === id) || (state.previewDeck?.id === id ? state.previewDeck : null);
 }
 
 function previewDeck(deck) {
   const existing = document.querySelector('#deck-preview-dialog');
   if (existing) existing.remove();
   const dialog = document.createElement('dialog');
+  state.previewDeck = deck;
   dialog.id = 'deck-preview-dialog';
   dialog.className = 'deck-dialog';
-  dialog.innerHTML = `<button class="dialog-close" data-action="close-preview" aria-label="Close preview">×</button><span class="section-num">DECLARATIVE PREVIEW</span><h2>${escapeHtml(deck.name)}</h2><p>${escapeHtml(deck.description)}</p><div class="preview-widgets">${deck.layout.widgets.map((widget) => `<article><small>${escapeHtml(widget.type)}</small><strong>${escapeHtml(widget.title)}</strong>${widget.content ? `<p>${escapeHtml(widget.content).replace(/\n/g, '<br>')}</p>` : ''}</article>`).join('')}</div><footer><span>${escapeHtml(deck.target.packageNames.join(' · '))}</span><span>${deck.layout.columns} column${deck.layout.columns === 1 ? '' : 's'}</span></footer>`;
+  const installed = installedRevision(deck, state.installed);
+  dialog.innerHTML = `<button class="dialog-close" data-action="close-preview" aria-label="Close preview">×</button><span class="section-num">DECLARATIVE PREVIEW · v${escapeHtml(deck.version || 1)}</span><h2>${escapeHtml(deck.name)}</h2><p>${escapeHtml(deck.description)}</p><div class="preview-widgets">${deck.layout.widgets.map((widget) => `<article><small>${escapeHtml(widget.type)}</small><strong>${escapeHtml(widget.title)}</strong>${widget.content ? `<p>${escapeHtml(widget.content).replace(/\n/g, '<br>')}</p>` : ''}</article>`).join('')}</div><footer><span>${escapeHtml(deck.target.packageNames.join(' · '))}</span><span>${deck.layout.columns} column${deck.layout.columns === 1 ? '' : 's'}</span><span class="dialog-actions"><button class="text-button" data-action="export-deck" data-deck-id="${escapeHtml(deck.id)}">Export JSON ↓</button>${installed ? `<button class="text-button danger" data-action="uninstall" data-deck-id="${escapeHtml(installed.id)}">Remove local copy</button>` : ''}</span></footer>`;
   document.body.append(dialog);
   dialog.showModal();
 }
 
+async function exportDeckFile(deck) {
+  const name = `${deck.slug}-v${deck.version || 1}.deck.json`;
+  const file = new File([serializeDeck(deck)], name, { type: 'application/json' });
+  if (navigator.share && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ title: deck.name, text: 'SecondDeck declarative Deck', files: [file] }); return; }
+    catch (error) { if (error.name === 'AbortError') return; }
+  }
+  const url = URL.createObjectURL(file); const link = document.createElement('a');
+  link.href = url; link.download = name; document.body.append(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
 function createPage() {
   root.innerHTML = pageShell(`<main class="builder"><section class="builder-copy"><span class="section-num">DECK CREATOR</span><h1>Make the bottom screen yours.</h1><p>Describe the game, choose only the widgets you need, and submit a safe declarative Deck for review.</p></section>
-    <form id="deck-form" class="builder-form"><label>Deck name<input name="name" required minlength="3" maxlength="80" placeholder="Emerald Field Notes"></label><label>What does it help with?<textarea name="description" required minlength="10" maxlength="500" placeholder="Routes, notes, and a session checklist…"></textarea></label><label>Android package name<input name="packageName" required pattern="[A-Za-z][A-Za-z0-9_.]{2,199}" placeholder="com.example.game"></label><div class="form-row"><label>Device profile<select name="deviceProfile"><option value="ayn-thor">AYN Thor</option><option value="generic-dual-screen">Generic dual screen</option><option value="foldable">Foldable</option><option value="tablet-external">Tablet + display</option></select></label><label>Wide-screen columns<select name="columns"><option value="2">Two</option><option value="1">One</option><option value="3">Three</option><option value="4">Four</option></select></label></div><label>Starter content <small>one checklist, guide, control, or map line per row</small><textarea name="content" maxlength="4000" placeholder="Find the eastern gate\nRestock supplies\nSave before the tower"></textarea></label><label>Optional public source URL<input name="sourceUrl" type="url" maxlength="500" placeholder="https://example.com/guide"></label><fieldset><legend>Widgets</legend>${['map','guide','checklist','notes','timer','controls','keyboard','trackpad','performance','links'].map((item, index) => `<label class="check"><input type="checkbox" name="widgets" value="${item}" ${index > 0 && index < 4 ? 'checked' : ''}><span>${item}</span></label>`).join('')}</fieldset><label class="toggle"><input type="checkbox" name="aiEnabled"><span>Allow optional AI assistance for this Deck</span></label><button class="button" type="submit">Submit for review</button><p class="form-status" role="status"></p></form></main>`, true);
+    <form id="deck-form" class="builder-form"><label>Deck name<input name="name" required minlength="3" maxlength="80" placeholder="Emerald Field Notes"></label><label>What does it help with?<textarea name="description" required minlength="10" maxlength="500" placeholder="Routes, notes, and a session checklist…"></textarea></label><label>Android package name<input name="packageName" required pattern="[A-Za-z][A-Za-z0-9_.]{2,199}" placeholder="com.example.game"></label><div class="form-row"><label>Device profile<select name="deviceProfile"><option value="ayn-thor">AYN Thor</option><option value="generic-dual-screen">Generic dual screen</option><option value="foldable">Foldable</option><option value="tablet-external">Tablet + display</option></select></label><label>Wide-screen columns<select name="columns"><option value="2">Two</option><option value="1">One</option><option value="3">Three</option><option value="4">Four</option></select></label></div><label>Deck version<input name="version" type="number" min="1" max="1000000" step="1" value="1" required></label><label>Starter content <small>one checklist, guide, control, or map line per row</small><textarea name="content" maxlength="4000" placeholder="Find the eastern gate\nRestock supplies\nSave before the tower"></textarea></label><label>Optional public source URL<input name="sourceUrl" type="url" maxlength="500" placeholder="https://example.com/guide"></label><fieldset><legend>Widgets</legend>${['map','guide','checklist','notes','timer','controls','keyboard','trackpad','performance','links'].map((item, index) => `<label class="check"><input type="checkbox" name="widgets" value="${item}" ${index > 0 && index < 4 ? 'checked' : ''}><span>${item}</span></label>`).join('')}</fieldset><label class="toggle"><input type="checkbox" name="aiEnabled"><span>Allow optional AI assistance for this Deck</span></label><div class="builder-actions"><button class="button ghost" type="button" data-action="preview-draft">Preview draft</button><button class="button ghost" type="button" data-action="install-draft">Install locally</button><button class="button" type="submit">Submit for review</button></div><p class="form-status" role="status"></p></form></main>`, true);
   document.querySelector('#deck-form').addEventListener('submit', submitDeck);
 }
 
-async function submitDeck(event) {
-  event.preventDefault(); const form = new FormData(event.currentTarget); const name = form.get('name'); const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 64); const types = form.getAll('widgets'); const status = document.querySelector('.form-status');
-  if (!types.length) { status.textContent = 'Choose at least one widget.'; return; }
+function deckFromForm(formElement) {
+  if (!formElement.reportValidity()) throw new Error('Complete the required Deck fields first.');
+  const form = new FormData(formElement); const name = form.get('name'); const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 64); const types = form.getAll('widgets');
+  if (!types.length) throw new Error('Choose at least one widget.');
   const content = String(form.get('content') || '').trim(); const sourceUrl = String(form.get('sourceUrl') || '').trim(); const columns = Number(form.get('columns'));
   const permissions = [...new Set([...(types.some((type) => ['keyboard', 'trackpad'].includes(type)) ? ['keyboard'] : []), ...(types.includes('performance') ? ['performance'] : []), ...(sourceUrl ? ['network'] : []), 'external-display'])];
-  const deck = { schemaVersion: 1, kind: 'deck', slug, name, description: form.get('description'), target: { packageNames: [form.get('packageName')], platforms: ['android'], deviceProfiles: [form.get('deviceProfile')] }, layout: { columns: 1, breakpoints: [{ minWidth: 700, columns }], widgets: types.map((type, index) => ({ id: `${type}-${index + 1}`, type, title: type[0].toUpperCase() + type.slice(1), ...(content && ['map', 'guide', 'checklist', 'controls', 'keyboard', 'trackpad'].includes(type) ? { content } : {}), ...(sourceUrl && ['map', 'guide', 'links'].includes(type) ? { sourceUrl } : {}) })) }, permissions, sources: sourceUrl ? [sourceUrl] : [], ai: { enabled: form.get('aiEnabled') === 'on', ...(form.get('aiEnabled') === 'on' ? { purpose: 'Assist with this Deck layout and session workflow.' } : {}) } };
-  try { await api('/api/decks', { method: 'POST', body: JSON.stringify(deck) }); status.textContent = 'Deck submitted for review.'; setTimeout(() => { location.hash = '#/app'; }, 900); }
+  return portableDeck({ schemaVersion: 1, kind: 'deck', version: Number(form.get('version')), slug, name, description: form.get('description'), target: { packageNames: [form.get('packageName')], platforms: ['android'], deviceProfiles: [form.get('deviceProfile')] }, layout: { columns: 1, breakpoints: [{ minWidth: 700, columns }], widgets: types.map((type, index) => ({ id: `${type}-${index + 1}`, type, title: type[0].toUpperCase() + type.slice(1), ...(content && ['map', 'guide', 'checklist', 'controls', 'keyboard', 'trackpad'].includes(type) ? { content } : {}), ...(sourceUrl && ['map', 'guide', 'links'].includes(type) ? { sourceUrl } : {}) })) }, permissions, sources: sourceUrl ? [sourceUrl] : [], ai: { enabled: form.get('aiEnabled') === 'on', ...(form.get('aiEnabled') === 'on' ? { purpose: 'Assist with this Deck layout and session workflow.' } : {}) } });
+}
+
+async function submitDeck(event) {
+  event.preventDefault(); const status = document.querySelector('.form-status');
+  try { const deck = deckFromForm(event.currentTarget); await api('/api/decks', { method: 'POST', body: JSON.stringify(deck) }); status.textContent = `Deck v${deck.version} submitted for review.`; setTimeout(() => { location.hash = '#/app'; }, 900); }
   catch (error) { if (error.status === 401) location.hash = '#/login'; else status.textContent = error.message; }
 }
 
@@ -249,12 +284,12 @@ async function ensureUser() {
     if (!state.user) { location.hash = '#/login'; return false; }
     state.offline = true;
   }
-  if (state.offline) state.decks = state.installed;
-  else try { state.decks = (await api('/api/decks')).decks; }
+  if (state.offline) state.decks = mergeCatalogWithInstalled([], state.installed);
+  else try { state.decks = mergeCatalogWithInstalled((await api('/api/decks')).decks, state.installed); }
   catch (error) {
     if (error.status === 401) { await clearToken(); location.hash = '#/login'; return false; }
     state.offline = true;
-    state.decks = state.installed;
+    state.decks = mergeCatalogWithInstalled([], state.installed);
   }
   state.detectedDeck = deckForPackage(state.display?.foregroundPackage, state.installed);
   if (state.detectedDeck && state.activeDeck?.id !== state.detectedDeck.id) state.activeDeck = setActiveDeck(state.detectedDeck.id);
@@ -264,7 +299,7 @@ async function ensureUser() {
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[char])); }
 
 async function route() {
-  if (isCompanionMode) { companion(); return; }
+  if (isCompanionMode) { await companion(); return; }
   const path = location.hash.slice(1) || '/';
   if (!state.config) state.config = await api('/api/config').catch(() => null);
   if (path === '/') home(); else if (path === '/login') login(); else if (path === '/app') await appPage(); else if (path === '/create') { if (await ensureUser()) createPage(); } else if (path === '/assistant') { if (await ensureUser()) assistantPage(); } else home();
@@ -274,6 +309,19 @@ document.addEventListener('click', async (event) => {
   const action = event.target.closest('[data-action]')?.dataset.action;
   if (action === 'logout') { await clearToken(); location.hash = '#/'; }
   if (action === 'close-preview') event.target.closest('dialog')?.close();
+  if (action === 'import-deck') document.querySelector('#deck-import')?.click();
+  if (action === 'export-deck') {
+    const deck = findDeck(event.target.closest('[data-deck-id]').dataset.deckId);
+    if (deck) await exportDeckFile(deck);
+  }
+  if (action === 'preview-draft' || action === 'install-draft') {
+    const form = event.target.closest('form'); const status = form?.querySelector('.form-status');
+    try {
+      const deck = localDeck(deckFromForm(form), 'Local draft');
+      if (action === 'preview-draft') { previewDeck(deck); status.textContent = 'Previewing a validated local draft.'; }
+      else { state.installed = installDeck(deck); state.activeDeck = activeDeck(); location.hash = '#/app'; }
+    } catch (error) { if (status) status.textContent = error.message; }
+  }
   if (action === 'usage-access') {
     try { await requestGameDetectionAccess(); document.querySelector('#device-status strong').textContent = 'Grant Usage Access, then return to SecondDeck.'; }
     catch (error) { document.querySelector('#device-status strong').textContent = error.message; }
@@ -294,7 +342,7 @@ document.addEventListener('click', async (event) => {
   }
   if (action === 'uninstall') {
     state.installed = uninstallDeck(event.target.closest('[data-deck-id]').dataset.deckId);
-    state.activeDeck = activeDeck(); await appPage();
+    state.activeDeck = activeDeck(); document.querySelector('#deck-preview-dialog')?.remove(); await appPage();
   }
   if (action === 'activate') {
     const deck = setActiveDeck(event.target.closest('[data-deck-id]').dataset.deckId);
@@ -308,6 +356,20 @@ document.addEventListener('click', async (event) => {
     try { await openCompanionDisplay(state.activeDeck); await appPage(); }
     catch (error) { const status = document.querySelector('#device-status strong'); if (status) status.textContent = error.message; }
   }
+});
+document.addEventListener('change', async (event) => {
+  if (event.target.id !== 'deck-import') return;
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const status = document.querySelector('#device-status strong');
+  try {
+    const deck = localDeck(parsePortableDeck(await file.text()));
+    state.installed = installDeck(deck); state.activeDeck = activeDeck();
+    await appPage();
+    const refreshed = document.querySelector('#device-status strong');
+    if (refreshed) refreshed.textContent = `${deck.name} imported and validated locally`;
+  } catch (error) { if (status) status.textContent = error.message; }
+  finally { event.target.value = ''; }
 });
 window.addEventListener('hashchange', route);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && location.hash === '#/app') appPage(); });
