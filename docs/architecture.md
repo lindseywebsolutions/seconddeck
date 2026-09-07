@@ -19,11 +19,14 @@
   user-controlled until automatic Thor arbitration can be physically validated.
 - The Express API owns email login, signed sessions, Deck validation/storage,
   corporate review/publishing, and server-side AI routing.
-- A Longhorn PVC persists submitted Decks. Published Decks are seeded and can
-  later move to a reviewed Git-backed catalog without changing the schema.
-  Immutable revisions share a stable channel ID; publishing an update
-  supersedes its prior public revision without hiding that prior revision while
-  review is pending.
+- A Longhorn PVC persists private submissions and reviewed community revisions.
+  The bundled marketplace baseline comes from the public `catalog/` directory
+  in GitHub. JSON and YAML files are bounded, parsed without aliases, strictly
+  validated before the server starts, and returned with their repository, tag,
+  and path. Curated records are never written to the PVC. Their slugs remain
+  stable channel IDs, so repository updates replace matching installed
+  revisions without duplicates. Publishing a server-reviewed update supersedes
+  its prior public revision without hiding that prior revision during review.
 - Reviewed Decks are installed into device-local storage. The selected Deck is
   passed to the secondary display as data and renders offline; notes and
   checklist state and timer state stay on the device. A narrowly scoped native
@@ -60,6 +63,9 @@ that private in-pod directory, which is discarded when the pod is replaced.
 - Creator email addresses remain available to the creator and corporate review
   queue but are replaced with a neutral publisher label in the community
   catalog response.
+- Catalog slugs are reserved against server submissions, and Git catalog records
+  cannot be changed through the runtime review endpoint. Their source remains a
+  normal repository review and release operation.
 - Public users never reach Codex; company users never silently fall back to
   Ollama. Provider selection uses only the verified session email.
 - AI Deck generation accepts only a bounded goal, exact Android package, and

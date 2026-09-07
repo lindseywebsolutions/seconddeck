@@ -1,0 +1,45 @@
+schemaVersion: 1
+kind: deck
+version: 1
+slug: retroarch-session
+name: RetroArch Session Deck
+description: A local session companion for routes, goals, notes, timing, and read-only device health.
+target:
+  packageNames:
+    - com.retroarch
+    - com.retroarch.aarch64
+  platforms:
+    - android
+    - retroarch
+  deviceProfiles:
+    - ayn-thor
+    - generic-dual-screen
+layout:
+  columns: 1
+  breakpoints:
+    - minWidth: 700
+      columns: 2
+  widgets:
+    - id: route-guide
+      type: guide
+      title: Route guide
+      content: Add the next route or objective here.
+    - id: session-goals
+      type: checklist
+      title: Session goals
+      content: Set a goal\nSave progress\nRecord the next step
+    - id: session-notes
+      type: notes
+      title: Session notes
+    - id: run-timer
+      type: timer
+      title: Run timer
+    - id: device-health
+      type: performance
+      title: Device health
+permissions:
+  - external-display
+  - performance
+sources: []
+ai:
+  enabled: false

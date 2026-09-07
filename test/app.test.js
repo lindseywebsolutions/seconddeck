@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../server/app.js';
 import { createAuthService } from '../server/auth.js';
 import { createDeckStore } from '../server/store.js';
+import { loadDeckCatalog } from '../server/catalog.js';
 
 describe('SecondDeck API', () => {
   let app; let code; let temp;
@@ -13,9 +14,10 @@ describe('SecondDeck API', () => {
     temp = await fs.mkdtemp(path.join(os.tmpdir(), 'seconddeck-test-'));
     const authService = createAuthService({ secret: 'api-test-secret-that-is-more-than-thirty-two-characters', sendCode: async (_email, value) => { code = value; }, randomInt: () => 123456 });
     const aiService = { providerForEmail: (email) => email.endsWith('@lindseywebsolutions.com') ? 'codex' : 'ollama', ask: vi.fn(async (email, prompt) => ({ provider: email.endsWith('@lindseywebsolutions.com') ? 'codex' : 'ollama', model: 'test', answer: prompt.includes('JSON object') ? JSON.stringify({ name: 'Generated Session', description: 'A generated and validated handheld session layout.', columns: 2, widgets: [{ type: 'timer', title: 'Session timer' }, { type: 'notes', title: 'Notes' }] }) : 'ok' })) };
+    const catalog = await loadDeckCatalog(new URL('../catalog', import.meta.url), { ref: 'test' });
     app = createApp({
       config: { publicUrl: 'https://seconddeck.test' }, authService, aiService,
-      deckStore: createDeckStore(temp), mailer: { verify: async () => true }
+      deckStore: createDeckStore(temp, { catalog }), mailer: { verify: async () => true }
     });
   });
   afterEach(async () => fs.rm(temp, { recursive: true, force: true }));
@@ -31,6 +33,7 @@ describe('SecondDeck API', () => {
     const token = await login();
     const response = await request(app).get('/api/decks').set('authorization', `Bearer ${token}`).expect(200);
     expect(response.body.decks[0].status).toBe('published');
+    expect(response.body.decks[0].catalog).toMatchObject({ repository: 'https://github.com/lindseywebsolutions/seconddeck', ref: 'test' });
   });
 
   it('serves Android app-link verification as JSON instead of the SPA shell', async () => {
@@ -40,7 +43,7 @@ describe('SecondDeck API', () => {
 
   it('advertises the portable Deck contract', async () => {
     const response = await request(app).get('/api/config').expect(200);
-    expect(response.body).toMatchObject({ deckSchemaVersion: 1, deckFileFormats: ['json', 'yaml'], maxDeckFileBytes: 65_536 });
+    expect(response.body).toMatchObject({ deckSchemaVersion: 1, deckFileFormats: ['json', 'yaml'], maxDeckFileBytes: 65_536, catalog: { mode: 'git-release', directory: 'catalog' } });
   });
 
   it('derives the AI provider from the authenticated email', async () => {

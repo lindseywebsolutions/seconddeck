@@ -2,41 +2,26 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-const starterDeck = {
-  id: 'starter-controls',
-  channelId: 'starter-controls',
-  schemaVersion: 1,
-  kind: 'deck',
-  version: 1,
-  slug: 'starter-controls',
-  name: 'Starter Control Deck',
-  description: 'A clean companion layout with a timer, checklist, session notes, and quick controls.',
-  target: { packageNames: ['com.example.game'], platforms: ['android'], deviceProfiles: ['ayn-thor', 'generic-dual-screen'] },
-  layout: { columns: 2, widgets: [
-    { id: 'session-checklist', type: 'checklist', title: 'Session checklist', content: 'Save game\nCheck battery\nSync progress' },
-    { id: 'run-timer', type: 'timer', title: 'Run timer' },
-    { id: 'quick-notes', type: 'notes', title: 'Quick notes' },
-    { id: 'controls', type: 'controls', title: 'Shortcuts', content: 'Screenshot\nBrightness\nVolume' }
-  ], breakpoints: [{ minWidth: 900, columns: 2 }] },
-  permissions: ['external-display'], sources: [], ai: { enabled: false }, status: 'published', author: 'SecondDeck', createdAt: '2026-09-07T00:00:00.000Z'
-};
-
-export function createDeckStore(dataPath) {
+export function createDeckStore(dataPath, { catalog = [] } = {}) {
   const file = path.join(dataPath, 'decks.json');
   let writes = Promise.resolve();
 
   async function read() {
-    try { return JSON.parse(await fs.readFile(file, 'utf8')); }
+    let records;
+    try { records = JSON.parse(await fs.readFile(file, 'utf8')); }
     catch (error) {
       if (error.code !== 'ENOENT') throw error;
-      return [starterDeck];
+      records = [];
     }
+    if (!Array.isArray(records)) throw new Error('Deck storage is invalid.');
+    const catalogChannels = new Set(catalog.map((deck) => deck.channelId));
+    return [...records.filter((deck) => !deck.catalog && !catalogChannels.has(deck.channelId || deck.id)), ...catalog];
   }
 
   async function persist(value) {
       await fs.mkdir(dataPath, { recursive: true });
       const temp = `${file}.${process.pid}.tmp`;
-      await fs.writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+      await fs.writeFile(temp, `${JSON.stringify(value.filter((deck) => !deck.catalog), null, 2)}\n`, { mode: 0o600 });
       await fs.rename(temp, file);
   }
 
@@ -52,9 +37,9 @@ export function createDeckStore(dataPath) {
   }
 
   function present(deck, user, includeReview) {
-    if (includeReview || deck.author === user.email || deck.author === 'SecondDeck') return deck;
+    if (deck.catalog || includeReview || deck.author === user.email) return deck;
     const { author: _author, reviewedBy: _reviewedBy, ...safe } = deck;
-    return { ...safe, publisher: 'Community' };
+    return { ...safe, publisher: deck.publisher || 'Community' };
   }
 
   return {
@@ -66,6 +51,9 @@ export function createDeckStore(dataPath) {
     },
     async submit(deck, user) {
       return mutate((all) => {
+        if (all.some((item) => item.catalog && item.slug === deck.slug)) {
+          throw Object.assign(new Error('This slug belongs to the GitHub catalog. Choose a distinct Deck slug.'), { statusCode: 409 });
+        }
         const prior = all.filter((item) => item.author === user.email && item.slug === deck.slug);
         const latestVersion = Math.max(0, ...prior.map((item) => Number(item.version || 1)));
         if (prior.length && deck.version <= latestVersion) {
@@ -82,6 +70,7 @@ export function createDeckStore(dataPath) {
       return mutate((all) => {
         const record = all.find((deck) => deck.id === id);
         if (!record) return null;
+        if (record.catalog) throw Object.assign(new Error('GitHub catalog Decks are reviewed through the repository.'), { statusCode: 409 });
         if (status === 'published') {
           all.filter((deck) => deck.id !== id && deck.author === record.author && deck.slug === record.slug && deck.status === 'published')
             .forEach((deck) => { deck.status = 'superseded'; });

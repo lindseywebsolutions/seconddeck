@@ -9,7 +9,7 @@ COPY server/deckSchema.js ./server/deckSchema.js
 RUN npm run build
 
 FROM node:22.22.0-bookworm-slim AS runtime
-ARG APP_VERSION=0.6.0
+ARG APP_VERSION=0.7.0
 ENV NODE_ENV=production \
     PORT=4080 \
     APP_VERSION=${APP_VERSION} \
@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 COPY package.json package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY server ./server
+COPY catalog ./catalog
 COPY public ./public
 COPY --from=build /app/dist ./dist
 RUN chown -R node:node /app

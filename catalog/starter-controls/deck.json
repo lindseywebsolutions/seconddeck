@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "kind": "deck",
+  "version": 1,
+  "slug": "starter-controls",
+  "name": "Starter Control Deck",
+  "description": "A clean companion layout with a timer, checklist, session notes, and quick reference controls.",
+  "target": {
+    "packageNames": ["com.example.game"],
+    "platforms": ["android"],
+    "deviceProfiles": ["ayn-thor", "generic-dual-screen"]
+  },
+  "layout": {
+    "columns": 1,
+    "breakpoints": [{ "minWidth": 700, "columns": 2 }],
+    "widgets": [
+      { "id": "session-checklist", "type": "checklist", "title": "Session checklist", "content": "Save game\nCheck battery\nSync progress" },
+      { "id": "run-timer", "type": "timer", "title": "Run timer" },
+      { "id": "quick-notes", "type": "notes", "title": "Quick notes" },
+      { "id": "controls", "type": "controls", "title": "Shortcuts", "content": "Screenshot\nBrightness\nVolume" }
+    ]
+  },
+  "permissions": ["external-display"],
+  "sources": [],
+  "ai": { "enabled": false }
+}

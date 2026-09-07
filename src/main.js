@@ -27,6 +27,15 @@ function safeSourceUrl(value) {
   catch { return null; }
 }
 
+function catalogSourceUrl(deck) {
+  const repository = safeSourceUrl(deck.catalog?.repository);
+  const ref = String(deck.catalog?.ref || 'main');
+  const sourcePath = String(deck.catalog?.path || '');
+  if (!repository || !/^[A-Za-z0-9._/-]{1,160}$/.test(ref) || !/^[A-Za-z0-9._/-]{1,300}$/.test(sourcePath)) return null;
+  const encodedPath = sourcePath.split('/').map(encodeURIComponent).join('/');
+  return `${repository.replace(/\/$/, '')}/blob/${encodeURIComponent(ref)}/${encodedPath}`;
+}
+
 function widgetMarkup(widget, index) {
   const id = escapeHtml(widget.id || `widget-${index + 1}`);
   const title = escapeHtml(widget.title || widget.type || 'Widget');
@@ -125,7 +134,7 @@ function home() {
     <section class="hero"><div class="eyebrow"><span></span> Built first for AYN Thor</div>
       <h1>Your game up top.<br><em>Everything else below.</em></h1>
       <p class="lede">SecondDeck turns the screen you are not playing on into a living companion—maps, guides, notes, persistent timers, read-only device telemetry, and community-built Decks that stay out of your way.</p>
-      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="obtainium://app/%7B%22id%22%3A%22com.lindseywebsolutions.seconddeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLindseyWebSolutions%2Fseconddeck%22%2C%22author%22%3A%22Lindsey%20Web%20Solutions%22%2C%22name%22%3A%22SecondDeck%22%7D">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.6.0.apk'}">Download APK</a></div>
+      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="obtainium://app/%7B%22id%22%3A%22com.lindseywebsolutions.seconddeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLindseyWebSolutions%2Fseconddeck%22%2C%22author%22%3A%22Lindsey%20Web%20Solutions%22%2C%22name%22%3A%22SecondDeck%22%7D">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.7.0.apk'}">Download APK</a></div>
       <p class="obtainium">On your Thor? Use <strong>Add to Obtainium</strong> so the source is saved as SecondDeck, or install the signed APK directly.</p>
       <div class="device"><div class="screen screen-top"><div class="game-art"><span>NOW PLAYING</span><strong>YOUR GAME</strong></div></div><div class="hinge"></div><div class="screen screen-bottom"><div class="deck-preview"><div class="mini-card teal">ROUTE<small>North ridge → tower</small></div><div class="mini-card amber">TIMER<small>01:42:18</small></div><div class="mini-card wide">SESSION NOTES<small>Key found · East gate unlocked</small></div></div></div></div>
     </section>
@@ -177,6 +186,7 @@ function deckCard(deck) {
   const updateAvailable = hasDeckUpdate(deck, state.installed);
   const active = installedRevision(deck, state.activeDeck ? [state.activeDeck] : []) !== null;
   const canReview = state.user?.aiProvider === 'codex';
+  const catalogUrl = catalogSourceUrl(deck);
   const action = deck.status === 'review'
     ? canReview
       ? `<span class="review-actions"><button class="text-button" data-action="review" data-review-status="rejected" data-deck-id="${escapeHtml(deck.id)}">Reject</button><button class="text-button" data-action="review" data-review-status="published" data-deck-id="${escapeHtml(deck.id)}">Publish</button></span>`
@@ -192,7 +202,7 @@ function deckCard(deck) {
       : installed
         ? `<button class="text-button" data-action="activate" data-deck-id="${escapeHtml(deck.id)}">Use on second screen →</button>`
         : `<button class="text-button" data-action="install" data-deck-id="${escapeHtml(deck.id)}">Install locally ↓</button>`;
-  return `<article class="deck-card" data-deck-search="${escapeHtml([deck.name, deck.description, ...(deck.target?.packageNames || [])].join(' ').toLowerCase())}"><div class="deck-art"><div>${widgetNames}</div></div><div class="deck-copy"><small>${escapeHtml(deck.target.platforms.join(' · '))} · v${escapeHtml(deck.version || 1)}</small><h3>${escapeHtml(deck.name)}</h3><p>${escapeHtml(deck.description)}</p><div><span class="status ${escapeHtml(updateAvailable ? 'update' : deck.status)}">${updateAvailable ? 'update available' : active ? 'active' : installed ? 'installed' : escapeHtml(deck.status)}</span><button class="text-button" data-action="preview" data-deck-id="${escapeHtml(deck.id)}">Preview</button></div><div class="deck-action">${action}</div></div></article>`;
+  return `<article class="deck-card" data-deck-search="${escapeHtml([deck.name, deck.description, deck.publisher, ...(deck.target?.packageNames || [])].join(' ').toLowerCase())}"><div class="deck-art"><div>${widgetNames}</div></div><div class="deck-copy"><small>${escapeHtml(deck.target.platforms.join(' · '))} · v${escapeHtml(deck.version || 1)}${deck.publisher ? ` · ${escapeHtml(deck.publisher)}` : ''}</small><h3>${escapeHtml(deck.name)}</h3><p>${escapeHtml(deck.description)}</p><div><span class="status ${escapeHtml(updateAvailable ? 'update' : deck.status)}">${updateAvailable ? 'update available' : active ? 'active' : installed ? 'installed' : escapeHtml(deck.status)}</span><button class="text-button" data-action="preview" data-deck-id="${escapeHtml(deck.id)}">Preview</button>${catalogUrl ? `<a class="text-button" href="${escapeHtml(catalogUrl)}" target="_blank" rel="noopener noreferrer">GitHub source ↗</a>` : ''}</div><div class="deck-action">${action}</div></div></article>`;
 }
 
 async function appPage() {

@@ -48,13 +48,13 @@ signing keystore.
 
 ## Status
 
-Version 0.6.0 includes the public homepage, authenticated community library,
+Version 0.7.0 includes the public homepage, authenticated GitHub-backed community library,
 Thor-friendly creator and corporate review queue, strict schema validation,
 local Deck installation/selection, a manifest-driven offline companion runtime,
 text maps, persistent timers, read-only device telemetry, explicit companion
 stop controls, versioned reviewed updates, strict JSON/YAML portability,
 on-device draft preview/install, validated AI-assisted Deck generation and AI
-routing, opt-in exact-package game detection,
+routing, startup-validated JSON/YAML catalog provenance, opt-in exact-package game detection,
 local exact-package display yield controls, native
 secondary-display presentation, Vault-backed ChatGPT authentication for the
 corporate Codex lane, Kubernetes manifests, and Obtainium-compatible APK hosting.
