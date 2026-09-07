@@ -5,6 +5,7 @@ import android.app.Presentation;
 import android.content.Context;
 import android.hardware.display.DisplayManager;
 import android.os.Bundle;
+import android.util.Base64;
 import android.view.Display;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -14,6 +15,7 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import java.nio.charset.StandardCharsets;
 
 @CapacitorPlugin(name = "SecondDisplay")
 public class SecondDisplayPlugin extends Plugin {
@@ -45,11 +47,21 @@ public class SecondDisplayPlugin extends Plugin {
             call.reject("No secondary display is available");
             return;
         }
-        String path = call.getString("path", "index.html?mode=companion");
+        JSObject deck = call.getObject("deck");
+        if (deck == null) {
+            call.reject("A validated Deck is required");
+            return;
+        }
+        String deckJson = deck.toString();
+        if (deckJson.getBytes(StandardCharsets.UTF_8).length > 65536) {
+            call.reject("Deck data exceeds the 64 KiB companion limit");
+            return;
+        }
+        String encodedDeck = Base64.encodeToString(deckJson.getBytes(StandardCharsets.UTF_8), Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
         Activity activity = getActivity();
         activity.runOnUiThread(() -> {
             if (presentation != null) presentation.dismiss();
-            presentation = new CompanionPresentation(activity, displays[0], path);
+            presentation = new CompanionPresentation(activity, displays[0], encodedDeck);
             presentation.show();
             call.resolve();
         });
@@ -62,10 +74,10 @@ public class SecondDisplayPlugin extends Plugin {
     }
 
     private static class CompanionPresentation extends Presentation {
-        private final String path;
-        CompanionPresentation(Context context, Display display, String path) {
+        private final String encodedDeck;
+        CompanionPresentation(Context context, Display display, String encodedDeck) {
             super(context, display);
-            this.path = path;
+            this.encodedDeck = encodedDeck;
         }
         @Override
         protected void onCreate(Bundle savedInstanceState) {
@@ -75,8 +87,9 @@ public class SecondDisplayPlugin extends Plugin {
             settings.setJavaScriptEnabled(true);
             settings.setDomStorageEnabled(true);
             settings.setAllowFileAccess(true);
+            settings.setAllowContentAccess(false);
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-            webView.loadUrl("file:///android_asset/public/" + path.replaceFirst("^/+", ""));
+            webView.loadUrl("file:///android_asset/public/index.html?mode=companion#deck=" + encodedDeck);
             setContentView(webView);
         }
     }

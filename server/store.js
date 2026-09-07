@@ -5,17 +5,18 @@ import crypto from 'node:crypto';
 const starterDeck = {
   id: 'starter-controls',
   schemaVersion: 1,
+  kind: 'deck',
   slug: 'starter-controls',
   name: 'Starter Control Deck',
   description: 'A clean companion layout with a timer, checklist, session notes, and quick controls.',
-  target: { packageNames: ['com.example.game'], platforms: ['android'] },
+  target: { packageNames: ['com.example.game'], platforms: ['android'], deviceProfiles: ['ayn-thor', 'generic-dual-screen'] },
   layout: { columns: 2, widgets: [
     { id: 'session-checklist', type: 'checklist', title: 'Session checklist', content: 'Save game\nCheck battery\nSync progress' },
     { id: 'run-timer', type: 'timer', title: 'Run timer' },
     { id: 'quick-notes', type: 'notes', title: 'Quick notes' },
     { id: 'controls', type: 'controls', title: 'Shortcuts', content: 'Screenshot\nBrightness\nVolume' }
-  ] },
-  permissions: [], ai: { enabled: false }, status: 'published', author: 'SecondDeck', createdAt: '2026-09-07T00:00:00.000Z'
+  ], breakpoints: [{ minWidth: 900, columns: 2 }] },
+  permissions: ['external-display'], sources: [], ai: { enabled: false }, status: 'published', author: 'SecondDeck', createdAt: '2026-09-07T00:00:00.000Z'
 };
 
 export function createDeckStore(dataPath) {
@@ -41,14 +42,24 @@ export function createDeckStore(dataPath) {
   }
 
   return {
-    async list(user) {
+    async list(user, { includeReview = false } = {}) {
       const all = await read();
-      return all.filter((deck) => deck.status === 'published' || deck.author === user.email);
+      return all.filter((deck) => deck.status === 'published' || deck.author === user.email || includeReview);
     },
     async submit(deck, user) {
       const all = await read();
       const record = { ...deck, id: crypto.randomUUID(), status: 'review', author: user.email, createdAt: new Date().toISOString() };
       all.push(record);
+      await persist(all);
+      return record;
+    },
+    async review(id, status, user) {
+      const all = await read();
+      const record = all.find((deck) => deck.id === id);
+      if (!record) return null;
+      record.status = status;
+      record.reviewedBy = user.email;
+      record.reviewedAt = new Date().toISOString();
       await persist(all);
       return record;
     }

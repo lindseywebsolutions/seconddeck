@@ -46,11 +46,13 @@ signing keystore.
 
 ## Status
 
-Version 0.1.2 is an installable foundation: public homepage, authenticated Deck
-library and Thor-friendly creator, strict schema validation, AI routing, native
-secondary-display detection/presentation, Kubernetes manifests, and
-Obtainium-compatible APK hosting. Automatic game detection and deeper device
-profiles remain roadmap work because they require physical AYN Thor validation.
+Version 0.2.0 includes the public homepage, authenticated community library,
+Thor-friendly creator and corporate review queue, strict schema validation,
+local Deck installation/selection, a manifest-driven offline companion runtime,
+AI routing, native secondary-display presentation, Kubernetes manifests, and
+Obtainium-compatible APK hosting. Automatic game detection and device-specific
+display arbitration remain roadmap work because they require physical AYN Thor
+validation.
 
 ## License
 

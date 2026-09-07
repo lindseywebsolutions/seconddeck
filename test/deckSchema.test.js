@@ -3,12 +3,13 @@ import { validateDeck } from '../server/deckSchema.js';
 
 const valid = {
   schemaVersion: 1,
+  kind: 'deck',
   slug: 'emerald-notes',
   name: 'Emerald Notes',
   description: 'A checklist and notes layout for longer sessions.',
-  target: { packageNames: ['org.example.emerald'], platforms: ['android'] },
-  layout: { columns: 2, widgets: [{ id: 'notes-1', type: 'notes', title: 'Notes' }] },
-  permissions: [], ai: { enabled: false }
+  target: { packageNames: ['org.example.emerald'], platforms: ['android'], deviceProfiles: ['ayn-thor'] },
+  layout: { columns: 1, breakpoints: [{ minWidth: 700, columns: 2 }], widgets: [{ id: 'notes-1', type: 'notes', title: 'Notes' }] },
+  permissions: ['external-display'], sources: ['https://example.com/guide'], ai: { enabled: false }
 };
 
 describe('Deck manifest validation', () => {

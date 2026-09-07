@@ -5,11 +5,20 @@
 - The Vite web client is bundled into both the hosted site and the Capacitor
   Android application.
 - The Android `SecondDisplay` Capacitor plugin uses Android `DisplayManager`
-  and a `Presentation` on compatible secondary displays.
+  and a `Presentation` on compatible secondary displays. It accepts only a
+  bounded declarative Deck payload and always loads the bundled companion page;
+  callers cannot choose arbitrary local files.
 - The Express API owns email login, signed sessions, Deck validation/storage,
-  and server-side AI routing.
+  corporate review/publishing, and server-side AI routing.
 - A Longhorn PVC persists submitted Decks. Published Decks are seeded and can
   later move to a reviewed Git-backed catalog without changing the schema.
+- Reviewed Decks are installed into device-local storage. The selected Deck is
+  passed to the secondary display as data and renders offline; notes and
+  checklist state stay on the device. A cached verified profile permits this
+  installed library to remain available through a network interruption.
+- The Android packaging step removes website-hosted APK artifacts from the
+  WebView bundle before Capacitor sync, preventing older releases from being
+  recursively embedded in each new APK.
 
 ## Runtime values
 
@@ -24,7 +33,9 @@ Kubernetes ConfigMap. The Codex authentication file is mounted read-only at
   attempt count, and are stored only as HMAC digests in process memory.
 - Sessions assert `email_verified` and expire after 30 days.
 - Deck schemas are strict and allow only known widget, permission, platform,
-  and HTTP(S) URL fields. Unknown executable fields are rejected.
+  device-profile, responsive-layout, artifact-kind, and HTTP(S) URL fields.
+  Unknown executable fields are rejected. Only verified corporate accounts can
+  publish or reject a community submission.
 - Public users never reach Codex; company users never silently fall back to
   Ollama. Provider selection uses only the verified session email.
 - The production pod runs as non-root with a read-only root filesystem, a

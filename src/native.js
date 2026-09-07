@@ -1,4 +1,5 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { encodeDeck } from './deckRuntime.js';
 
 const SecondDisplay = registerPlugin('SecondDisplay');
 
@@ -8,10 +9,11 @@ export async function getDisplayState() {
   catch { return { native: true, displays: [], isExtended: false }; }
 }
 
-export async function openCompanionDisplay() {
+export async function openCompanionDisplay(deck) {
+  if (!deck) throw new Error('Install and activate a Deck first.');
   if (!Capacitor.isNativePlatform()) {
-    if ('requestFullscreen' in document.documentElement) await document.documentElement.requestFullscreen();
+    window.open(`${location.pathname}?mode=companion#deck=${encodeDeck(deck)}`, '_blank', 'noopener');
     return;
   }
-  return SecondDisplay.showCompanion({ path: 'index.html?mode=companion' });
+  return SecondDisplay.showCompanion({ deck });
 }

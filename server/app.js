@@ -26,8 +26,8 @@ export function createApp({ config, authService, aiService, deckStore, mailer })
     catch { res.status(503).json({ status: 'not-ready', email: 'unavailable' }); }
   });
   app.get('/api/config', (_req, res) => res.json({
-    name: 'SecondDeck', version: process.env.APP_VERSION || '0.1.2', login: 'email-code', widgetTypes,
-    downloadUrl: `${config.publicUrl}/downloads/seconddeck-v${process.env.APP_VERSION || '0.1.2'}.apk`,
+    name: 'SecondDeck', version: process.env.APP_VERSION || '0.2.0', login: 'email-code', widgetTypes,
+    downloadUrl: `${config.publicUrl}/downloads/seconddeck-v${process.env.APP_VERSION || '0.2.0'}.apk`,
     obtainiumSourceUrl: config.publicUrl
   }));
 
@@ -46,7 +46,7 @@ export function createApp({ config, authService, aiService, deckStore, mailer })
   const authenticated = requireUser(authService);
   app.get('/api/me', authenticated, (req, res) => res.json({ email: req.user.email, aiProvider: aiService.providerForEmail?.(req.user.email) }));
   app.get('/api/decks', authenticated, async (req, res, next) => {
-    try { res.json({ decks: await deckStore.list(req.user) }); }
+    try { res.json({ decks: await deckStore.list(req.user, { includeReview: aiService.providerForEmail?.(req.user.email) === 'codex' }) }); }
     catch (error) { next(error); }
   });
   app.post('/api/decks', authenticated, async (req, res, next) => {
@@ -54,6 +54,16 @@ export function createApp({ config, authService, aiService, deckStore, mailer })
       const result = validateDeck(req.body);
       if (!result.success) return res.status(400).json({ error: 'Invalid Deck manifest.', issues: result.error.issues.map(({ path, message }) => ({ path, message })) });
       res.status(201).json({ deck: await deckStore.submit(result.data, req.user) });
+    } catch (error) { next(error); }
+  });
+  app.post('/api/decks/:id/review', authenticated, async (req, res, next) => {
+    try {
+      if (aiService.providerForEmail?.(req.user.email) !== 'codex') return res.status(403).json({ error: 'A verified Lindsey Web Solutions account is required.' });
+      const status = String(req.body?.status || '');
+      if (!['published', 'rejected'].includes(status)) return res.status(400).json({ error: 'Review status must be published or rejected.' });
+      const deck = await deckStore.review(req.params.id, status, req.user);
+      if (!deck) return res.status(404).json({ error: 'Deck not found.' });
+      res.json({ deck });
     } catch (error) { next(error); }
   });
   app.post('/api/assistant', authenticated, aiLimiter, async (req, res, next) => {

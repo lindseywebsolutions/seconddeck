@@ -1,6 +1,6 @@
 {
   "name": "seconddeck",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": false,
   "type": "module",
   "description": "Local-first dual-screen Android companion platform",
@@ -11,7 +11,7 @@
     "start": "node server/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "android:sync": "npm run build && cap sync android",
+    "android:sync": "npm run build && node scripts/prepare-android-web.js && cap sync android && node scripts/prepare-android-web.js",
     "android:debug": "npm run android:sync && cd android && ./gradlew assembleDebug",
     "android:release": "npm run android:sync && cd android && ./gradlew assembleRelease"
   },

@@ -46,4 +46,30 @@ describe('SecondDeck API', () => {
     const companyResult = await request(app).post('/api/assistant').set('authorization', `Bearer ${companyToken}`).send({ prompt: 'Make a timer' }).expect(200);
     expect(companyResult.body.provider).toBe('codex');
   });
+
+  it('keeps submissions private until a company reviewer publishes them', async () => {
+    const manifest = {
+      schemaVersion: 1,
+      kind: 'deck',
+      slug: 'community-route',
+      name: 'Community Route',
+      description: 'A reviewed route and checklist for community sessions.',
+      target: { packageNames: ['org.example.community'], platforms: ['android'], deviceProfiles: ['ayn-thor'] },
+      layout: { columns: 1, breakpoints: [{ minWidth: 700, columns: 2 }], widgets: [{ id: 'route', type: 'guide', title: 'Route', content: 'Head north' }] },
+      permissions: ['external-display'], sources: [], ai: { enabled: false }
+    };
+    const authorToken = await login('creator@example.com');
+    const submitted = await request(app).post('/api/decks').set('authorization', `Bearer ${authorToken}`).send(manifest).expect(201);
+    expect(submitted.body.deck.status).toBe('review');
+    await request(app).post(`/api/decks/${submitted.body.deck.id}/review`).set('authorization', `Bearer ${authorToken}`).send({ status: 'published' }).expect(403);
+
+    const reviewerToken = await login('reviewer@lindseywebsolutions.com');
+    const reviewQueue = await request(app).get('/api/decks').set('authorization', `Bearer ${reviewerToken}`).expect(200);
+    expect(reviewQueue.body.decks.some((deck) => deck.id === submitted.body.deck.id)).toBe(true);
+    await request(app).post(`/api/decks/${submitted.body.deck.id}/review`).set('authorization', `Bearer ${reviewerToken}`).send({ status: 'published' }).expect(200);
+
+    const viewerToken = await login('viewer@example.com');
+    const catalog = await request(app).get('/api/decks').set('authorization', `Bearer ${viewerToken}`).expect(200);
+    expect(catalog.body.decks.find((deck) => deck.id === submitted.body.deck.id)?.status).toBe('published');
+  });
 });
