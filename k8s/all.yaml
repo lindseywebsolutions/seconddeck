@@ -1,0 +1,358 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: seconddeck
+  labels:
+    app.kubernetes.io/name: seconddeck
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: seconddeck
+  namespace: seconddeck
+automountServiceAccountToken: false
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: seconddeck-runtime
+  namespace: seconddeck
+spec:
+  refreshInterval: 15m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-backend
+  target:
+    name: seconddeck-runtime
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      metadata:
+        labels:
+          app.kubernetes.io/name: seconddeck
+  data:
+    - secretKey: SESSION_SECRET
+      remoteRef:
+        key: seconddeck/runtime
+        property: SESSION_SECRET
+    - secretKey: SMTP_HOST
+      remoteRef:
+        key: lws/runtime/lws-office
+        property: SMTP_HOST
+    - secretKey: SMTP_PORT
+      remoteRef:
+        key: lws/runtime/lws-office
+        property: SMTP_PORT
+    - secretKey: SMTP_SECURE
+      remoteRef:
+        key: lws/runtime/lws-office
+        property: SMTP_SECURE
+    - secretKey: SMTP_USER
+      remoteRef:
+        key: lws/runtime/lws-office
+        property: SMTP_USER
+    - secretKey: SMTP_PASS
+      remoteRef:
+        key: lws/runtime/lws-office
+        property: SMTP_PASS
+    - secretKey: EMAIL_FROM
+      remoteRef:
+        key: lws/runtime/lws-office
+        property: EMAIL_FROM
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: seconddeck-codex-api
+  namespace: seconddeck
+spec:
+  refreshInterval: 15m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-backend
+  target:
+    name: seconddeck-codex-api
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      metadata:
+        labels:
+          app.kubernetes.io/name: seconddeck
+  data:
+    - secretKey: OPENAI_API_KEY
+      remoteRef:
+        key: lws/runtime/lws-office
+        property: OPENAI_API_KEY
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: seconddeck-data
+  namespace: seconddeck
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seconddeck-config
+  namespace: seconddeck
+data:
+  PORT: "4080"
+  APP_VERSION: "0.1.1"
+  PUBLIC_URL: https://seconddeck.lws-workspace.com
+  DATA_PATH: /app/data
+  CORPORATE_EMAIL_DOMAIN: lindseywebsolutions.com
+  OLLAMA_URL: http://ollama.lindseywebsolutions.svc.cluster.local:11434
+  OLLAMA_MODEL: qwen2.5:7b-instruct
+  CODEX_MODEL: gpt-5.3-codex
+  CODEX_HOME: /app/codex-home
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seconddeck
+  namespace: seconddeck
+  labels:
+    app.kubernetes.io/name: seconddeck
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: seconddeck
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: seconddeck
+    spec:
+      serviceAccountName: seconddeck
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: lws-desktop
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: codex-login
+          image: 192.168.0.31:30501/seconddeck@sha256:3f0e06e42698472c24095b56965284c77a53f42974e4ea0a73bbb1ecf351ab94
+          imagePullPolicy: IfNotPresent
+          command: [/bin/sh, -ec]
+          args:
+            - |
+              umask 077
+              printf '%s' "$OPENAI_API_KEY" | HOME=/app/codex-home CODEX_HOME=/app/codex-home codex login --with-api-key >/dev/null
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: seconddeck-codex-api
+                  key: OPENAI_API_KEY
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: codex-home
+              mountPath: /app/codex-home
+      containers:
+        - name: app
+          image: 192.168.0.31:30501/seconddeck@sha256:3f0e06e42698472c24095b56965284c77a53f42974e4ea0a73bbb1ecf351ab94
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 4080
+          envFrom:
+            - configMapRef:
+                name: seconddeck-config
+            - secretRef:
+                name: seconddeck-runtime
+          resources:
+            requests:
+              cpu: 200m
+              memory: 384Mi
+              ephemeral-storage: 256Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+              ephemeral-storage: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          readinessProbe:
+            httpGet:
+              path: /api/health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          livenessProbe:
+            httpGet:
+              path: /api/health/live
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: tmp
+              mountPath: /tmp
+            - name: codex-home
+              mountPath: /app/codex-home
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: seconddeck-data
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi
+        - name: codex-home
+          emptyDir:
+            sizeLimit: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: seconddeck
+  namespace: seconddeck
+  labels:
+    app.kubernetes.io/name: seconddeck
+spec:
+  selector:
+    app.kubernetes.io/name: seconddeck
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: seconddeck
+  namespace: seconddeck
+spec:
+  entryPoints: [web, websecure]
+  routes:
+    - kind: Rule
+      match: Host(`seconddeck.lws-workspace.com`)
+      middlewares:
+        - name: rate-limit
+          namespace: lws-networking
+        - name: security-headers
+          namespace: lws-networking
+      services:
+        - name: seconddeck
+          port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: seconddeck
+  namespace: seconddeck
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: seconddeck
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: lindseywebsolutions
+      ports:
+        - protocol: TCP
+          port: 4080
+    # Kubelet HTTP probes originate from the node rather than the Traefik
+    # namespace. Keep this LAN-scoped and port-specific.
+    - from:
+        - ipBlock:
+            cidr: 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 4080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: lindseywebsolutions
+      ports:
+        - protocol: TCP
+          port: 11434
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 465
+        - protocol: TCP
+          port: 587
+---
+# Cilium is chained with Flannel in this cluster, so same-node Traefik and
+# kubelet probe traffic can lose its original namespace/node identity. The
+# workload has no NodePort; opening only its HTTP backend port preserves the
+# default-deny policy for every other port while allowing ingress and probes.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: seconddeck-http-for-cilium-flannel
+  namespace: seconddeck
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: seconddeck
+  ingress:
+    - fromEntities:
+        - all
+      toPorts:
+        - ports:
+            - port: "4080"
+              protocol: TCP
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: seconddeck
+  namespace: seconddeck
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: seconddeck

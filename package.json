@@ -1,0 +1,39 @@
+{
+  "name": "seconddeck",
+  "version": "0.1.1",
+  "private": false,
+  "type": "module",
+  "description": "Local-first dual-screen Android companion platform",
+  "license": "MIT",
+  "scripts": {
+    "dev": "concurrently -n web,api \"vite --host 0.0.0.0\" \"node --watch server/index.js\"",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "android:sync": "npm run build && cap sync android",
+    "android:debug": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "android:release": "npm run android:sync && cd android && ./gradlew assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/app": "^7.1.0",
+    "@capacitor/browser": "^7.0.2",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/preferences": "^7.0.2",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "jose": "^6.1.0",
+    "nodemailer": "^10.0.1",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "concurrently": "^9.2.1",
+    "supertest": "^7.1.4",
+    "vite": "^7.1.4",
+    "vitest": "^3.2.4"
+  }
+}

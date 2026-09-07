@@ -1,0 +1,13 @@
+node_modules/
+dist/
+data/
+.env
+.DS_Store
+android/.gradle/
+android/.idea/
+android/local.properties
+android/**/build/
+*.jks
+*.keystore
+public/downloads/*.apk
+!public/downloads/README.md

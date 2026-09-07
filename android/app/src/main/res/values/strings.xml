@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SecondDeck</string>
+    <string name="title_activity_main">SecondDeck</string>
+    <string name="package_name">com.lindseywebsolutions.seconddeck</string>
+    <string name="custom_url_scheme">com.lindseywebsolutions.seconddeck</string>
+</resources>

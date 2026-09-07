@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.lindseywebsolutions.seconddeck",
+      "sha256_cert_fingerprints": [
+        "82:88:F3:70:C2:7E:7A:6C:5D:A5:0A:40:5B:FC:00:31:23:D6:6E:CC:10:73:AC:12:54:69:86:F8:ED:00:06:F2"
+      ]
+    }
+  }
+]
