@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeDeck, decodeDeck, deckForPackage, deckFromLocation, encodeDeck, installDeck, installedDecks, setActiveDeck, uninstallDeck } from '../src/deckRuntime.js';
+import { activeDeck, decodeDeck, deckForPackage, deckFromLocation, encodeDeck, installDeck, installedDecks, setActiveDeck, setPackageYield, shouldYieldForPackage, uninstallDeck, yieldedPackages } from '../src/deckRuntime.js';
 
 function memoryStorage() {
   const values = new Map();
@@ -48,5 +48,22 @@ describe('local Deck runtime', () => {
     const decks = [{ ...first, target: { packageNames: ['com.example.game'] } }];
     expect(deckForPackage('COM.EXAMPLE.GAME', decks)?.id).toBe(first.id);
     expect(deckForPackage('com.example.game.demo', decks)).toBeNull();
+  });
+
+  it('persists exact-package display arbitration locally', () => {
+    const storage = memoryStorage();
+    expect(setPackageYield(' COM.Example.Game ', true, storage)).toEqual(['com.example.game']);
+    expect(shouldYieldForPackage('com.example.game', storage)).toBe(true);
+    expect(shouldYieldForPackage('com.example.game.demo', storage)).toBe(false);
+    expect(yieldedPackages(storage)).toEqual(['com.example.game']);
+    expect(setPackageYield('com.example.game', false, storage)).toEqual([]);
+    expect(shouldYieldForPackage('com.example.game', storage)).toBe(false);
+  });
+
+  it('rejects malformed package names from the arbitration list', () => {
+    const storage = memoryStorage();
+    expect(() => setPackageYield('not a package', true, storage)).toThrow('valid Android package');
+    expect(() => setPackageYield('single', true, storage)).toThrow('valid Android package');
+    expect(yieldedPackages(storage)).toEqual([]);
   });
 });

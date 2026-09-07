@@ -80,6 +80,7 @@ textarea { resize:vertical; min-height:120px; }
 .device-status>.text-button { color:var(--mint); font:500 .6rem 'DM Mono'; white-space:nowrap; }
 .device-actions { display:flex; gap:14px; justify-content:flex-end; }
 .device-actions .text-button { color:var(--mint); font:500 .6rem 'DM Mono'; white-space:nowrap; }
+.text-button:disabled { opacity:.55; cursor:not-allowed; }
 .device-actions .stop { color:var(--amber); }
 .section-title { display:flex; justify-content:space-between; align-items:end; margin-bottom:25px; }
 .section-title h2 { margin:8px 0 0; font-size:2rem; }

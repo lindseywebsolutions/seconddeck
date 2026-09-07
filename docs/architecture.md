@@ -13,8 +13,10 @@
 - Opt-in Android Usage Access reads only recent foreground package events. The
   client performs an exact package-name match against locally installed Decks
   and may select a match, but never opens a secondary presentation without a
-  user action. This is intentionally conservative until Thor arbitration is
-  physically validated.
+  user action. A local exact-package yield list lets the user identify apps that
+  own both displays; a yielded app is never auto-selected and every presentation
+  launch route refuses to compete for its lower screen. This is intentionally
+  user-controlled until automatic Thor arbitration can be physically validated.
 - The Express API owns email login, signed sessions, Deck validation/storage,
   corporate review/publishing, and server-side AI routing.
 - A Longhorn PVC persists submitted Decks. Published Decks are seeded and can
@@ -68,4 +70,5 @@ that private in-pod directory, which is discarded when the pod is replaced.
 An Android build and secondary-display API test do not prove AYN Thor behavior.
 Before calling Thor support complete, install the signed APK on a real Thor and
 verify display discovery, presentation placement, touch focus, game coexistence,
-rotation, suspend/resume, and in-place Obtainium update.
+rotation, suspend/resume, per-package yield and restore, and in-place Obtainium
+update.

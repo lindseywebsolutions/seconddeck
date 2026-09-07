@@ -1,12 +1,12 @@
 import './styles.css';
 import { api, clearToken, getCachedProfile, getToken, setCachedProfile, setToken } from './auth.js';
 import { closeCompanionDisplay, getDisplayState, openCompanionDisplay, requestGameDetectionAccess } from './native.js';
-import { activeDeck, deckForPackage, deckFromLocation, installDeck, installedDecks, setActiveDeck, uninstallDeck } from './deckRuntime.js';
+import { activeDeck, deckForPackage, deckFromLocation, installDeck, installedDecks, setActiveDeck, setPackageYield, shouldYieldForPackage, uninstallDeck } from './deckRuntime.js';
 import { formatBytes, formatDuration, normalizePerformanceSnapshot, readTimerState, timerElapsed, toggleTimer } from './companionRuntime.js';
 import { hasDeckUpdate, installedRevision, localDeck, mergeCatalogWithInstalled, parsePortableDeck, portableDeck, serializeDeck } from './deckPortability.js';
 
 const root = document.querySelector('#app');
-const state = { user: null, decks: [], installed: [], activeDeck: null, detectedDeck: null, previewDeck: null, display: null, config: null, offline: false };
+const state = { user: null, decks: [], installed: [], activeDeck: null, detectedDeck: null, yieldedPackage: null, previewDeck: null, display: null, config: null, offline: false };
 const isCompanionMode = new URLSearchParams(location.search).get('mode') === 'companion';
 
 const icon = (name) => ({
@@ -125,12 +125,12 @@ function home() {
     <section class="hero"><div class="eyebrow"><span></span> Built first for AYN Thor</div>
       <h1>Your game up top.<br><em>Everything else below.</em></h1>
       <p class="lede">SecondDeck turns the screen you are not playing on into a living companion—maps, guides, notes, persistent timers, read-only device telemetry, and community-built Decks that stay out of your way.</p>
-      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="obtainium://app/%7B%22id%22%3A%22com.lindseywebsolutions.seconddeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLindseyWebSolutions%2Fseconddeck%22%2C%22author%22%3A%22Lindsey%20Web%20Solutions%22%2C%22name%22%3A%22SecondDeck%22%7D">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.4.0.apk'}">Download APK</a></div>
+      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="obtainium://app/%7B%22id%22%3A%22com.lindseywebsolutions.seconddeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLindseyWebSolutions%2Fseconddeck%22%2C%22author%22%3A%22Lindsey%20Web%20Solutions%22%2C%22name%22%3A%22SecondDeck%22%7D">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.5.0.apk'}">Download APK</a></div>
       <p class="obtainium">On your Thor? Use <strong>Add to Obtainium</strong> so the source is saved as SecondDeck, or install the signed APK directly.</p>
       <div class="device"><div class="screen screen-top"><div class="game-art"><span>NOW PLAYING</span><strong>YOUR GAME</strong></div></div><div class="hinge"></div><div class="screen screen-bottom"><div class="deck-preview"><div class="mini-card teal">ROUTE<small>North ridge → tower</small></div><div class="mini-card amber">TIMER<small>01:42:18</small></div><div class="mini-card wide">SESSION NOTES<small>Key found · East gate unlocked</small></div></div></div></div>
     </section>
     <section id="features" class="feature-section"><div><span class="section-num">01 / RUNTIME</span><h2>Useful when you need it.<br>Invisible when you don't.</h2></div><div class="feature-grid">
-      <article>${icon('layers')}<h3>Dual-screen aware</h3><p>Matches installed Decks to recently played games. Secondary-display launch always remains under your control.</p></article>
+      <article>${icon('layers')}<h3>Dual-screen aware</h3><p>Matches installed Decks to recently played games. You can make SecondDeck always yield when an app owns both screens.</p></article>
       <article>${icon('shield')}<h3>Safe by design</h3><p>Decks are validated data—not executable plugins. You decide every permission.</p></article>
       <article>${icon('spark')}<h3>AI, with a local lane</h3><p>Private Ollama assistance for community accounts; Codex for verified LWS members.</p></article>
     </div></section>
@@ -186,7 +186,9 @@ function deckCard(deck) {
     : updateAvailable
       ? `<button class="text-button" data-action="install" data-deck-id="${escapeHtml(deck.id)}">Update to v${escapeHtml(deck.version || 1)} ↓</button>`
     : active
-      ? `<button class="text-button active-action" data-action="display" data-deck-id="${escapeHtml(deck.id)}">Launch ↗</button>`
+      ? state.yieldedPackage
+        ? '<button class="text-button active-action" disabled>Yielding to current app</button>'
+        : `<button class="text-button active-action" data-action="display" data-deck-id="${escapeHtml(deck.id)}">Launch ↗</button>`
       : installed
         ? `<button class="text-button" data-action="activate" data-deck-id="${escapeHtml(deck.id)}">Use on second screen →</button>`
         : `<button class="text-button" data-action="install" data-deck-id="${escapeHtml(deck.id)}">Install locally ↓</button>`;
@@ -195,9 +197,10 @@ function deckCard(deck) {
 
 async function appPage() {
   if (!(await ensureUser())) return;
-  const runtimeMessage = state.detectedDeck ? `${state.detectedDeck.name} matched to ${state.display.foregroundPackage}` : state.display?.foregroundPackage ? `No installed Deck matches ${state.display.foregroundPackage}` : state.display?.usageAccessGranted ? 'Waiting for a supported game' : state.display?.native ? 'Game detection is off' : 'Web preview';
-  root.innerHTML = pageShell(`<main class="dashboard"><section class="dash-head"><div><span class="eyebrow"><span></span> ${escapeHtml(state.user.email)}</span><h1>Your second screen,<br>ready when you are.</h1></div><button class="button" data-action="display" ${state.activeDeck ? '' : 'disabled'}>${state.activeDeck ? `Launch ${escapeHtml(state.activeDeck.name)}` : 'Install a Deck to launch'}</button></section>
-    <div class="device-status" id="device-status"><span class="pulse"></span><strong>${state.offline ? 'Offline library ready' : state.display?.companionVisible ? 'Companion is running' : state.display?.isExtended ? 'Second display detected' : 'Ready for a second display'}</strong><span>${escapeHtml(runtimeMessage)} · ${state.installed.length} installed · ${state.decks.length} available</span><span class="device-actions">${state.display?.native && !state.display?.usageAccessGranted ? '<button class="text-button" data-action="usage-access">Enable game detection</button>' : ''}${state.display?.companionVisible ? '<button class="text-button stop" data-action="stop-display">Stop companion</button>' : ''}</span></div>
+  const runtimeMessage = state.yieldedPackage ? `Yielding to ${state.yieldedPackage}; SecondDeck will not use its lower screen` : state.detectedDeck ? `${state.detectedDeck.name} matched to ${state.display.foregroundPackage}` : state.display?.foregroundPackage ? `No installed Deck matches ${state.display.foregroundPackage}` : state.display?.usageAccessGranted ? 'Waiting for a supported game' : state.display?.native ? 'Game detection is off' : 'Web preview';
+  const canLaunch = Boolean(state.activeDeck && !state.yieldedPackage);
+  root.innerHTML = pageShell(`<main class="dashboard"><section class="dash-head"><div><span class="eyebrow"><span></span> ${escapeHtml(state.user.email)}</span><h1>Your second screen,<br>ready when you are.</h1></div><button class="button" data-action="display" ${canLaunch ? '' : 'disabled'}>${state.yieldedPackage ? 'Yielding to current app' : state.activeDeck ? `Launch ${escapeHtml(state.activeDeck.name)}` : 'Install a Deck to launch'}</button></section>
+    <div class="device-status" id="device-status"><span class="pulse"></span><strong>${state.yieldedPackage ? 'Current app owns both screens' : state.offline ? 'Offline library ready' : state.display?.companionVisible ? 'Companion is running' : state.display?.isExtended ? 'Second display detected' : 'Ready for a second display'}</strong><span>${escapeHtml(runtimeMessage)} · ${state.installed.length} installed · ${state.decks.length} available</span><span class="device-actions">${state.display?.native && !state.display?.usageAccessGranted ? '<button class="text-button" data-action="usage-access">Enable game detection</button>' : ''}${state.display?.foregroundPackage ? state.yieldedPackage ? '<button class="text-button" data-action="allow-package">Allow companion for this app</button>' : '<button class="text-button" data-action="yield-package">Always yield for this app</button>' : ''}${state.display?.companionVisible ? '<button class="text-button stop" data-action="stop-display">Stop companion</button>' : ''}</span></div>
     <section><div class="section-title"><div><span class="section-num">COMMUNITY LIBRARY</span><h2>Reviewed and local Decks</h2></div><div class="library-actions"><button class="button ghost small" data-action="import-deck">Import JSON/YAML</button><a class="button ghost small" href="#/create">${icon('plus')} Create Deck</a><input id="deck-import" type="file" accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml" hidden></div></div><label class="library-search">Find a game or Deck<input id="deck-search" type="search" placeholder="Search name, description, or package…"></label><div class="deck-grid">${state.decks.map(deckCard).join('') || '<p class="empty-library">You are offline. Installed Decks remain available after the catalog reconnects.</p>'}</div></section></main>`, true);
   document.querySelector('#deck-search')?.addEventListener('input', filterDecks);
 }
@@ -292,8 +295,21 @@ async function ensureUser() {
     state.decks = mergeCatalogWithInstalled([], state.installed);
   }
   state.detectedDeck = deckForPackage(state.display?.foregroundPackage, state.installed);
+  state.yieldedPackage = shouldYieldForPackage(state.display?.foregroundPackage) ? state.display.foregroundPackage : null;
+  if (state.yieldedPackage) state.detectedDeck = null;
   if (state.detectedDeck && state.activeDeck?.id !== state.detectedDeck.id) state.activeDeck = setActiveDeck(state.detectedDeck.id);
   return true;
+}
+
+async function launchCompanion(deck) {
+  state.display = await getDisplayState();
+  const packageName = state.display?.foregroundPackage;
+  if (shouldYieldForPackage(packageName)) {
+    state.yieldedPackage = packageName;
+    throw new Error(`SecondDeck is yielding to ${packageName}. Allow the companion for this app first.`);
+  }
+  if (!deck) throw new Error('Install and select a Deck before launching.');
+  await openCompanionDisplay(deck);
 }
 
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[char])); }
@@ -330,6 +346,14 @@ document.addEventListener('click', async (event) => {
     try { await closeCompanionDisplay(); await appPage(); }
     catch (error) { document.querySelector('#device-status strong').textContent = error.message; }
   }
+  if (action === 'yield-package' || action === 'allow-package') {
+    const packageName = state.display?.foregroundPackage;
+    try {
+      setPackageYield(packageName, action === 'yield-package');
+      if (action === 'yield-package' && state.display?.companionVisible) await closeCompanionDisplay();
+      await appPage();
+    } catch (error) { const status = document.querySelector('#device-status strong'); if (status) status.textContent = error.message; }
+  }
   if (action === 'preview') { const deck = findDeck(event.target.closest('[data-deck-id]').dataset.deckId); if (deck) previewDeck(deck); }
   if (action === 'install') {
     const deck = findDeck(event.target.closest('[data-deck-id]').dataset.deckId);
@@ -347,13 +371,13 @@ document.addEventListener('click', async (event) => {
   if (action === 'activate') {
     const deck = setActiveDeck(event.target.closest('[data-deck-id]').dataset.deckId);
     state.activeDeck = deck;
-    try { await openCompanionDisplay(deck); await appPage(); }
+    try { await launchCompanion(deck); await appPage(); }
     catch (error) { document.querySelector('#device-status strong').textContent = error.message; }
   }
   if (action === 'display') {
     const requested = event.target.closest('[data-deck-id]')?.dataset.deckId;
     if (requested) state.activeDeck = setActiveDeck(requested);
-    try { await openCompanionDisplay(state.activeDeck); await appPage(); }
+    try { await launchCompanion(state.activeDeck); await appPage(); }
     catch (error) { const status = document.querySelector('#device-status strong'); if (status) status.textContent = error.message; }
   }
 });

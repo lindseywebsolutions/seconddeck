@@ -1,5 +1,7 @@
 const installedKey = 'seconddeck_installed_decks_v1';
 const activeKey = 'seconddeck_active_deck_v1';
+const yieldedPackagesKey = 'seconddeck_yielded_packages_v1';
+const androidPackagePattern = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/i;
 
 function parse(value, fallback) {
   try { return value ? JSON.parse(value) : fallback; }
@@ -67,6 +69,35 @@ export function deckForPackage(packageName, decks) {
   return (decks || []).find((deck) => deck.target?.packageNames?.some((name) => String(name).toLowerCase() === target)) || null;
 }
 
+function normalizedPackageName(packageName) {
+  const value = String(packageName || '').trim().toLowerCase();
+  return value.length <= 200 && androidPackagePattern.test(value) ? value : null;
+}
+
+export function yieldedPackages(storage) {
+  const value = parse(store(storage).getItem(yieldedPackagesKey), []);
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map(normalizedPackageName).filter(Boolean))].slice(0, 100).sort();
+}
+
+export function shouldYieldForPackage(packageName, storage) {
+  const value = normalizedPackageName(packageName);
+  return Boolean(value && yieldedPackages(storage).includes(value));
+}
+
+export function setPackageYield(packageName, shouldYield, storage) {
+  const value = normalizedPackageName(packageName);
+  if (!value) throw new Error('A valid Android package name is required.');
+  const target = store(storage);
+  const packages = yieldedPackages(target).filter((item) => item !== value);
+  if (shouldYield && packages.length >= 100) throw new Error('The display yield list is full.');
+  if (shouldYield) packages.push(value);
+  const result = packages.sort();
+  if (result.length) target.setItem(yieldedPackagesKey, JSON.stringify(result));
+  else target.removeItem(yieldedPackagesKey);
+  return result;
+}
+
 export function encodeDeck(deck) {
   const bytes = new TextEncoder().encode(JSON.stringify(deck));
   let binary = '';
@@ -91,4 +122,4 @@ export function deckFromLocation(locationLike) {
   return match ? decodeDeck(match[1]) : null;
 }
 
-export const deckStorageKeys = { installedKey, activeKey };
+export const deckStorageKeys = { installedKey, activeKey, yieldedPackagesKey };
