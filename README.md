@@ -48,7 +48,7 @@ signing keystore.
 
 ## Status
 
-Version 0.7.0 includes the public homepage, authenticated GitHub-backed community library,
+Version 0.7.1 includes the public homepage, authenticated GitHub-backed community library,
 Thor-friendly creator and corporate review queue, strict schema validation,
 local Deck installation/selection, a manifest-driven offline companion runtime,
 text maps, persistent timers, read-only device telemetry, explicit companion

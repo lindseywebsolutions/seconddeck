@@ -53,7 +53,7 @@ export async function loadDeckCatalog(catalogPath, options = {}) {
       channelId: deck.slug,
       status: 'published',
       publisher: 'SecondDeck GitHub Catalog',
-      catalog: { repository, ref, path: filename.split(path.sep).join('/') }
+      catalog: { repository, ref, path: `catalog/${filename.split(path.sep).join('/')}` }
     });
   }
   if (!records.length) throw new Error('The Git-backed Deck catalog is empty.');

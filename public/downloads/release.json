@@ -1,7 +1,7 @@
 {
   "name": "SecondDeck",
   "package": "com.lindseywebsolutions.seconddeck",
-  "version": "0.7.0",
-  "versionCode": 11,
-  "apk": "/downloads/seconddeck-v0.7.0.apk"
+  "version": "0.7.1",
+  "versionCode": 12,
+  "apk": "/downloads/seconddeck-v0.7.1.apk"
 }

@@ -16,7 +16,7 @@ describe('Git-backed Deck catalog', () => {
     const catalog = await loadDeckCatalog(new URL('../catalog', import.meta.url), { ref: 'v-test' });
     expect(catalog.map((deck) => deck.slug)).toEqual(['retroarch-session', 'starter-controls']);
     expect(catalog.every((deck) => deck.status === 'published' && deck.channelId === deck.slug)).toBe(true);
-    expect(catalog[0].catalog).toMatchObject({ repository: 'https://github.com/lindseywebsolutions/seconddeck', ref: 'v-test', path: 'retroarch-session/deck.yaml' });
+    expect(catalog[0].catalog).toMatchObject({ repository: 'https://github.com/lindseywebsolutions/seconddeck', ref: 'v-test', path: 'catalog/retroarch-session/deck.yaml' });
   });
 
   it('rejects executable or schema-invalid catalog files before startup', async () => {
