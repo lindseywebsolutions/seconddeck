@@ -23,3 +23,9 @@ export async function openCompanionDisplay(deck) {
   }
   return SecondDisplay.showCompanion({ deck });
 }
+
+export async function closeCompanionDisplay() {
+  if (!Capacitor.isNativePlatform()) return false;
+  await SecondDisplay.dismissCompanion();
+  return true;
+}

@@ -26,8 +26,8 @@ export function createApp({ config, authService, aiService, deckStore, mailer })
     catch { res.status(503).json({ status: 'not-ready', email: 'unavailable' }); }
   });
   app.get('/api/config', (_req, res) => res.json({
-    name: 'SecondDeck', version: process.env.APP_VERSION || '0.2.2', login: 'email-code', widgetTypes,
-    downloadUrl: `${config.publicUrl}/downloads/seconddeck-v${process.env.APP_VERSION || '0.2.2'}.apk`,
+    name: 'SecondDeck', version: process.env.APP_VERSION || '0.3.0', login: 'email-code', widgetTypes,
+    downloadUrl: `${config.publicUrl}/downloads/seconddeck-v${process.env.APP_VERSION || '0.3.0'}.apk`,
     obtainiumSourceUrl: config.publicUrl
   }));
 

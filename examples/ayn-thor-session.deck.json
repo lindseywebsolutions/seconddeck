@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "kind": "deck",
+  "slug": "ayn-thor-session",
+  "name": "AYN Thor Session Deck",
+  "description": "An offline route map, checklist, persistent timer, notes, and read-only device telemetry.",
+  "target": {
+    "packageNames": ["com.example.game"],
+    "platforms": ["android"],
+    "deviceProfiles": ["ayn-thor", "generic-dual-screen"]
+  },
+  "layout": {
+    "columns": 1,
+    "breakpoints": [
+      { "minWidth": 700, "columns": 2 }
+    ],
+    "widgets": [
+      { "id": "route-map", "type": "map", "title": "Route", "content": "CAMP -> RIDGE\n          |\n        TOWER" },
+      { "id": "checklist", "type": "checklist", "title": "Session checklist", "content": "Save before the tower\nRestock supplies\nCheck battery" },
+      { "id": "timer", "type": "timer", "title": "Run timer" },
+      { "id": "notes", "type": "notes", "title": "Local notes" },
+      { "id": "device", "type": "performance", "title": "Device health" }
+    ]
+  },
+  "permissions": ["external-display", "performance"],
+  "sources": [],
+  "ai": { "enabled": false }
+}

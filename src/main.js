@@ -1,7 +1,8 @@
 import './styles.css';
 import { api, clearToken, getCachedProfile, getToken, setCachedProfile, setToken } from './auth.js';
-import { getDisplayState, openCompanionDisplay, requestGameDetectionAccess } from './native.js';
+import { closeCompanionDisplay, getDisplayState, openCompanionDisplay, requestGameDetectionAccess } from './native.js';
 import { activeDeck, deckForPackage, deckFromLocation, installDeck, installedDecks, setActiveDeck, uninstallDeck } from './deckRuntime.js';
+import { formatBytes, formatDuration, normalizePerformanceSnapshot, readTimerState, timerElapsed, toggleTimer } from './companionRuntime.js';
 
 const root = document.querySelector('#app');
 const state = { user: null, decks: [], installed: [], activeDeck: null, detectedDeck: null, display: null, config: null, offline: false };
@@ -30,11 +31,36 @@ function widgetMarkup(widget, index) {
   const title = escapeHtml(widget.title || widget.type || 'Widget');
   const lines = String(widget.content || '').split('\n').map((line) => line.trim()).filter(Boolean);
   const copy = lines.length ? lines.map((line) => `<p>${escapeHtml(line)}</p>`).join('') : '<p class="empty-widget">Ready for this session.</p>';
-  if (widget.type === 'timer') return `<article class="companion-widget timer" data-widget-id="${id}"><small>${title}</small><strong>00:00:00</strong><button type="button" data-timer-toggle>Start</button></article>`;
+  if (widget.type === 'timer') return `<article class="companion-widget timer" data-widget-id="${id}"><small>${title}</small><strong data-timer-value>00:00:00</strong><div class="timer-actions"><button type="button" data-timer-toggle>Start</button><button type="button" data-timer-reset>Reset</button></div></article>`;
   if (widget.type === 'checklist') return `<article class="companion-widget checklist" data-widget-id="${id}"><small>${title}</small>${lines.map((line, lineIndex) => `<label><input type="checkbox" data-persist="check:${id}:${lineIndex}"> ${escapeHtml(line)}</label>`).join('') || '<p class="empty-widget">Nothing left to check off.</p>'}</article>`;
   if (widget.type === 'notes') return `<article class="companion-widget notes" data-widget-id="${id}"><small>${title}</small><textarea data-persist="notes:${id}" aria-label="${title}" placeholder="Notes stay on this device…"></textarea></article>`;
   const source = safeSourceUrl(widget.sourceUrl);
+  if (widget.type === 'map') return `<article class="companion-widget map" data-widget-id="${id}"><small>${title}</small><pre>${escapeHtml(lines.join('\n') || 'Add route or map notes to this Deck.')}</pre>${source ? `<a class="widget-link" href="${escapeHtml(source)}" target="_blank" rel="noopener noreferrer">Open full map ↗</a>` : ''}</article>`;
+  if (widget.type === 'performance') return `<article class="companion-widget performance" data-widget-id="${id}" data-performance><small>${title}</small><div class="metric-grid"><div><span>Battery</span><strong data-metric="battery">—</strong></div><div><span>Thermals</span><strong data-metric="thermal">—</strong></div><div><span>Memory free</span><strong data-metric="memory">—</strong></div><div><span>Refresh</span><strong data-metric="refresh">—</strong></div></div><p class="metric-note">Read-only device telemetry · updates locally</p></article>`;
   return `<article class="companion-widget ${escapeHtml(widget.type)}" data-widget-id="${id}"><small>${title}</small>${copy}${source ? `<a class="widget-link" href="${escapeHtml(source)}" target="_blank" rel="noopener noreferrer">Open source ↗</a>` : ''}</article>`;
+}
+
+async function readPerformanceSnapshot() {
+  try {
+    if (window.SecondDeckMetrics?.snapshot) return normalizePerformanceSnapshot(JSON.parse(window.SecondDeckMetrics.snapshot()));
+  } catch { /* Fall through to privacy-safe web capabilities. */ }
+  let battery = null;
+  try { battery = await navigator.getBattery?.(); } catch { /* Browser does not expose battery state. */ }
+  return normalizePerformanceSnapshot({
+    batteryPercent: battery ? battery.level * 100 : null,
+    charging: battery?.charging === true,
+    totalMemoryBytes: Number.isFinite(navigator.deviceMemory) ? navigator.deviceMemory * 1024 ** 3 : null
+  });
+}
+
+function drawPerformance(widget, metrics) {
+  const battery = metrics.batteryPercent === null ? 'Unavailable' : `${Math.round(metrics.batteryPercent)}%${metrics.charging ? ' ⚡' : ''}`;
+  const temperature = metrics.batteryTemperatureC === null ? '' : ` · ${metrics.batteryTemperatureC.toFixed(1)}°C`;
+  const memory = metrics.availableMemoryBytes === null ? formatBytes(metrics.totalMemoryBytes) : `${formatBytes(metrics.availableMemoryBytes)} / ${formatBytes(metrics.totalMemoryBytes)}`;
+  widget.querySelector('[data-metric="battery"]').textContent = battery;
+  widget.querySelector('[data-metric="thermal"]').textContent = `${metrics.thermalLabel}${temperature}`;
+  widget.querySelector('[data-metric="memory"]').textContent = memory;
+  widget.querySelector('[data-metric="refresh"]').textContent = metrics.refreshRateHz === null ? 'Unavailable' : `${metrics.refreshRateHz.toFixed(0)} Hz`;
 }
 
 function wireCompanionState(deck) {
@@ -46,19 +72,29 @@ function wireCompanionState(deck) {
     else if (value !== null) field.value = value;
     field.addEventListener('input', () => localStorage.setItem(key, field.type === 'checkbox' ? String(field.checked) : field.value));
   });
-  document.querySelectorAll('[data-timer-toggle]').forEach((toggle) => {
-    const timer = toggle.previousElementSibling;
-    let startedAt; let elapsed = 0; let interval;
+  document.querySelectorAll('.timer[data-widget-id]').forEach((widget) => {
+    const timer = widget.querySelector('[data-timer-value]');
+    const toggle = widget.querySelector('[data-timer-toggle]');
+    const reset = widget.querySelector('[data-timer-reset]');
+    const key = `${prefix}timer:${widget.dataset.widgetId}`;
+    let state = readTimerState(localStorage.getItem(key));
+    let interval;
     const draw = () => {
-      const total = elapsed + (startedAt ? Date.now() - startedAt : 0);
-      const seconds = Math.floor(total / 1000);
-      timer.textContent = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
-        .map((part) => String(part).padStart(2, '0')).join(':');
+      timer.textContent = formatDuration(timerElapsed(state));
+      toggle.textContent = state.startedAt === null ? (state.elapsedMs ? 'Resume' : 'Start') : 'Pause';
     };
+    const syncInterval = () => { clearInterval(interval); if (state.startedAt !== null) interval = setInterval(draw, 250); };
     toggle.addEventListener('click', () => {
-      if (startedAt) { elapsed += Date.now() - startedAt; startedAt = undefined; clearInterval(interval); toggle.textContent = 'Resume'; draw(); }
-      else { startedAt = Date.now(); interval = setInterval(draw, 250); toggle.textContent = 'Pause'; }
+      state = toggleTimer(state);
+      localStorage.setItem(key, JSON.stringify(state));
+      syncInterval(); draw();
     });
+    reset.addEventListener('click', () => { state = { elapsedMs: 0, startedAt: null }; localStorage.removeItem(key); syncInterval(); draw(); });
+    syncInterval(); draw();
+  });
+  document.querySelectorAll('[data-performance]').forEach((widget) => {
+    const refresh = async () => drawPerformance(widget, await readPerformanceSnapshot());
+    refresh(); setInterval(refresh, 5000);
   });
 }
 
@@ -83,8 +119,8 @@ function home() {
   root.innerHTML = pageShell(`<main>
     <section class="hero"><div class="eyebrow"><span></span> Built first for AYN Thor</div>
       <h1>Your game up top.<br><em>Everything else below.</em></h1>
-      <p class="lede">SecondDeck turns the screen you are not playing on into a living companion—guides, notes, timers, controls, and community-built Decks that stay out of your way.</p>
-      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="obtainium://app/%7B%22id%22%3A%22com.lindseywebsolutions.seconddeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLindseyWebSolutions%2Fseconddeck%22%2C%22author%22%3A%22Lindsey%20Web%20Solutions%22%2C%22name%22%3A%22SecondDeck%22%7D">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.2.2.apk'}">Download APK</a></div>
+      <p class="lede">SecondDeck turns the screen you are not playing on into a living companion—maps, guides, notes, persistent timers, read-only device telemetry, and community-built Decks that stay out of your way.</p>
+      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="obtainium://app/%7B%22id%22%3A%22com.lindseywebsolutions.seconddeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLindseyWebSolutions%2Fseconddeck%22%2C%22author%22%3A%22Lindsey%20Web%20Solutions%22%2C%22name%22%3A%22SecondDeck%22%7D">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.3.0.apk'}">Download APK</a></div>
       <p class="obtainium">On your Thor? Use <strong>Add to Obtainium</strong> so the source is saved as SecondDeck, or install the signed APK directly.</p>
       <div class="device"><div class="screen screen-top"><div class="game-art"><span>NOW PLAYING</span><strong>YOUR GAME</strong></div></div><div class="hinge"></div><div class="screen screen-bottom"><div class="deck-preview"><div class="mini-card teal">ROUTE<small>North ridge → tower</small></div><div class="mini-card amber">TIMER<small>01:42:18</small></div><div class="mini-card wide">SESSION NOTES<small>Key found · East gate unlocked</small></div></div></div></div>
     </section>
@@ -151,7 +187,7 @@ async function appPage() {
   if (!(await ensureUser())) return;
   const runtimeMessage = state.detectedDeck ? `${state.detectedDeck.name} matched to ${state.display.foregroundPackage}` : state.display?.foregroundPackage ? `No installed Deck matches ${state.display.foregroundPackage}` : state.display?.usageAccessGranted ? 'Waiting for a supported game' : state.display?.native ? 'Game detection is off' : 'Web preview';
   root.innerHTML = pageShell(`<main class="dashboard"><section class="dash-head"><div><span class="eyebrow"><span></span> ${escapeHtml(state.user.email)}</span><h1>Your second screen,<br>ready when you are.</h1></div><button class="button" data-action="display" ${state.activeDeck ? '' : 'disabled'}>${state.activeDeck ? `Launch ${escapeHtml(state.activeDeck.name)}` : 'Install a Deck to launch'}</button></section>
-    <div class="device-status" id="device-status"><span class="pulse"></span><strong>${state.offline ? 'Offline library ready' : state.display?.isExtended ? 'Second display detected' : 'Ready for a second display'}</strong><span>${escapeHtml(runtimeMessage)} · ${state.installed.length} installed · ${state.decks.length} available</span>${state.display?.native && !state.display?.usageAccessGranted ? '<button class="text-button" data-action="usage-access">Enable game detection</button>' : ''}</div>
+    <div class="device-status" id="device-status"><span class="pulse"></span><strong>${state.offline ? 'Offline library ready' : state.display?.companionVisible ? 'Companion is running' : state.display?.isExtended ? 'Second display detected' : 'Ready for a second display'}</strong><span>${escapeHtml(runtimeMessage)} · ${state.installed.length} installed · ${state.decks.length} available</span><span class="device-actions">${state.display?.native && !state.display?.usageAccessGranted ? '<button class="text-button" data-action="usage-access">Enable game detection</button>' : ''}${state.display?.companionVisible ? '<button class="text-button stop" data-action="stop-display">Stop companion</button>' : ''}</span></div>
     <section><div class="section-title"><div><span class="section-num">COMMUNITY LIBRARY</span><h2>Reviewed Decks</h2></div><a class="button ghost small" href="#/create">${icon('plus')} Create Deck</a></div><div class="deck-grid">${state.decks.map(deckCard).join('') || '<p class="empty-library">You are offline. Installed Decks remain available after the catalog reconnects.</p>'}</div></section></main>`, true);
 }
 
@@ -172,7 +208,7 @@ function previewDeck(deck) {
 
 function createPage() {
   root.innerHTML = pageShell(`<main class="builder"><section class="builder-copy"><span class="section-num">DECK CREATOR</span><h1>Make the bottom screen yours.</h1><p>Describe the game, choose only the widgets you need, and submit a safe declarative Deck for review.</p></section>
-    <form id="deck-form" class="builder-form"><label>Deck name<input name="name" required minlength="3" maxlength="80" placeholder="Emerald Field Notes"></label><label>What does it help with?<textarea name="description" required minlength="10" maxlength="500" placeholder="Routes, notes, and a session checklist…"></textarea></label><label>Android package name<input name="packageName" required pattern="[A-Za-z][A-Za-z0-9_.]{2,199}" placeholder="com.example.game"></label><div class="form-row"><label>Device profile<select name="deviceProfile"><option value="ayn-thor">AYN Thor</option><option value="generic-dual-screen">Generic dual screen</option><option value="foldable">Foldable</option><option value="tablet-external">Tablet + display</option></select></label><label>Wide-screen columns<select name="columns"><option value="2">Two</option><option value="1">One</option><option value="3">Three</option><option value="4">Four</option></select></label></div><label>Starter content <small>one checklist item or guide line per row</small><textarea name="content" maxlength="4000" placeholder="Find the eastern gate\nRestock supplies\nSave before the tower"></textarea></label><label>Optional public source URL<input name="sourceUrl" type="url" maxlength="500" placeholder="https://example.com/guide"></label><fieldset><legend>Widgets</legend>${['guide','checklist','notes','timer','controls','keyboard','trackpad','performance','links'].map((item, index) => `<label class="check"><input type="checkbox" name="widgets" value="${item}" ${index < 3 ? 'checked' : ''}><span>${item}</span></label>`).join('')}</fieldset><label class="toggle"><input type="checkbox" name="aiEnabled"><span>Allow optional AI assistance for this Deck</span></label><button class="button" type="submit">Submit for review</button><p class="form-status" role="status"></p></form></main>`, true);
+    <form id="deck-form" class="builder-form"><label>Deck name<input name="name" required minlength="3" maxlength="80" placeholder="Emerald Field Notes"></label><label>What does it help with?<textarea name="description" required minlength="10" maxlength="500" placeholder="Routes, notes, and a session checklist…"></textarea></label><label>Android package name<input name="packageName" required pattern="[A-Za-z][A-Za-z0-9_.]{2,199}" placeholder="com.example.game"></label><div class="form-row"><label>Device profile<select name="deviceProfile"><option value="ayn-thor">AYN Thor</option><option value="generic-dual-screen">Generic dual screen</option><option value="foldable">Foldable</option><option value="tablet-external">Tablet + display</option></select></label><label>Wide-screen columns<select name="columns"><option value="2">Two</option><option value="1">One</option><option value="3">Three</option><option value="4">Four</option></select></label></div><label>Starter content <small>one checklist, guide, control, or map line per row</small><textarea name="content" maxlength="4000" placeholder="Find the eastern gate\nRestock supplies\nSave before the tower"></textarea></label><label>Optional public source URL<input name="sourceUrl" type="url" maxlength="500" placeholder="https://example.com/guide"></label><fieldset><legend>Widgets</legend>${['map','guide','checklist','notes','timer','controls','keyboard','trackpad','performance','links'].map((item, index) => `<label class="check"><input type="checkbox" name="widgets" value="${item}" ${index > 0 && index < 4 ? 'checked' : ''}><span>${item}</span></label>`).join('')}</fieldset><label class="toggle"><input type="checkbox" name="aiEnabled"><span>Allow optional AI assistance for this Deck</span></label><button class="button" type="submit">Submit for review</button><p class="form-status" role="status"></p></form></main>`, true);
   document.querySelector('#deck-form').addEventListener('submit', submitDeck);
 }
 
@@ -181,7 +217,7 @@ async function submitDeck(event) {
   if (!types.length) { status.textContent = 'Choose at least one widget.'; return; }
   const content = String(form.get('content') || '').trim(); const sourceUrl = String(form.get('sourceUrl') || '').trim(); const columns = Number(form.get('columns'));
   const permissions = [...new Set([...(types.some((type) => ['keyboard', 'trackpad'].includes(type)) ? ['keyboard'] : []), ...(types.includes('performance') ? ['performance'] : []), ...(sourceUrl ? ['network'] : []), 'external-display'])];
-  const deck = { schemaVersion: 1, kind: 'deck', slug, name, description: form.get('description'), target: { packageNames: [form.get('packageName')], platforms: ['android'], deviceProfiles: [form.get('deviceProfile')] }, layout: { columns: 1, breakpoints: [{ minWidth: 700, columns }], widgets: types.map((type, index) => ({ id: `${type}-${index + 1}`, type, title: type[0].toUpperCase() + type.slice(1), ...(content && ['guide', 'checklist', 'controls', 'keyboard', 'trackpad', 'performance'].includes(type) ? { content } : {}), ...(sourceUrl && ['guide', 'links'].includes(type) ? { sourceUrl } : {}) })) }, permissions, sources: sourceUrl ? [sourceUrl] : [], ai: { enabled: form.get('aiEnabled') === 'on', ...(form.get('aiEnabled') === 'on' ? { purpose: 'Assist with this Deck layout and session workflow.' } : {}) } };
+  const deck = { schemaVersion: 1, kind: 'deck', slug, name, description: form.get('description'), target: { packageNames: [form.get('packageName')], platforms: ['android'], deviceProfiles: [form.get('deviceProfile')] }, layout: { columns: 1, breakpoints: [{ minWidth: 700, columns }], widgets: types.map((type, index) => ({ id: `${type}-${index + 1}`, type, title: type[0].toUpperCase() + type.slice(1), ...(content && ['map', 'guide', 'checklist', 'controls', 'keyboard', 'trackpad'].includes(type) ? { content } : {}), ...(sourceUrl && ['map', 'guide', 'links'].includes(type) ? { sourceUrl } : {}) })) }, permissions, sources: sourceUrl ? [sourceUrl] : [], ai: { enabled: form.get('aiEnabled') === 'on', ...(form.get('aiEnabled') === 'on' ? { purpose: 'Assist with this Deck layout and session workflow.' } : {}) } };
   try { await api('/api/decks', { method: 'POST', body: JSON.stringify(deck) }); status.textContent = 'Deck submitted for review.'; setTimeout(() => { location.hash = '#/app'; }, 900); }
   catch (error) { if (error.status === 401) location.hash = '#/login'; else status.textContent = error.message; }
 }
@@ -242,6 +278,10 @@ document.addEventListener('click', async (event) => {
     try { await requestGameDetectionAccess(); document.querySelector('#device-status strong').textContent = 'Grant Usage Access, then return to SecondDeck.'; }
     catch (error) { document.querySelector('#device-status strong').textContent = error.message; }
   }
+  if (action === 'stop-display') {
+    try { await closeCompanionDisplay(); await appPage(); }
+    catch (error) { document.querySelector('#device-status strong').textContent = error.message; }
+  }
   if (action === 'preview') { const deck = findDeck(event.target.closest('[data-deck-id]').dataset.deckId); if (deck) previewDeck(deck); }
   if (action === 'install') {
     const deck = findDeck(event.target.closest('[data-deck-id]').dataset.deckId);
@@ -259,13 +299,13 @@ document.addEventListener('click', async (event) => {
   if (action === 'activate') {
     const deck = setActiveDeck(event.target.closest('[data-deck-id]').dataset.deckId);
     state.activeDeck = deck;
-    try { await openCompanionDisplay(deck); }
+    try { await openCompanionDisplay(deck); await appPage(); }
     catch (error) { document.querySelector('#device-status strong').textContent = error.message; }
   }
   if (action === 'display') {
     const requested = event.target.closest('[data-deck-id]')?.dataset.deckId;
     if (requested) state.activeDeck = setActiveDeck(requested);
-    try { await openCompanionDisplay(state.activeDeck); }
+    try { await openCompanionDisplay(state.activeDeck); await appPage(); }
     catch (error) { const status = document.querySelector('#device-status strong'); if (status) status.textContent = error.message; }
   }
 });

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const widgetTypes = ['guide', 'checklist', 'notes', 'timer', 'controls', 'keyboard', 'trackpad', 'performance', 'links'];
+export const widgetTypes = ['map', 'guide', 'checklist', 'notes', 'timer', 'controls', 'keyboard', 'trackpad', 'performance', 'links'];
 
 const safeUrl = z.string().url().max(500).refine((value) => ['https:', 'http:'].includes(new URL(value).protocol), 'Only HTTP(S) URLs are allowed');
 const profileName = z.string().regex(/^[a-z0-9][a-z0-9-]{1,47}$/);
@@ -34,7 +34,22 @@ export const deckSchema = z.object({
   permissions: z.array(z.enum(['network', 'keyboard', 'performance', 'external-display'])).max(4).default([]),
   sources: z.array(safeUrl).max(12).default([]),
   ai: z.object({ enabled: z.boolean(), purpose: z.string().trim().max(200).optional() }).strict().default({ enabled: false })
-}).strict();
+}).strict().superRefine((deck, context) => {
+  const widgetTypesInDeck = new Set(deck.layout.widgets.map((widget) => widget.type));
+  const permissions = new Set(deck.permissions);
+  const requirePermission = (permission, message) => {
+    if (!permissions.has(permission)) context.addIssue({ code: 'custom', path: ['permissions'], message });
+  };
+  if (deck.kind === 'deck') requirePermission('external-display', 'A runnable Deck must declare external-display access.');
+  if (widgetTypesInDeck.has('performance')) requirePermission('performance', 'Performance widgets must declare read-only performance access.');
+  if (widgetTypesInDeck.has('keyboard') || widgetTypesInDeck.has('trackpad')) requirePermission('keyboard', 'Keyboard and trackpad widgets must declare keyboard access.');
+  const declaredSources = new Set(deck.sources);
+  deck.layout.widgets.forEach((widget, index) => {
+    if (!widget.sourceUrl) return;
+    requirePermission('network', 'Widgets with public sources must declare network access.');
+    if (!declaredSources.has(widget.sourceUrl)) context.addIssue({ code: 'custom', path: ['layout', 'widgets', index, 'sourceUrl'], message: 'Widget sources must appear in the Deck source allowlist.' });
+  });
+});
 
 export function validateDeck(input) {
   return deckSchema.safeParse(input);

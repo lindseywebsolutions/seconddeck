@@ -41,17 +41,20 @@ npm run android:debug
 ```
 
 Runtime configuration is documented in [`docs/architecture.md`](docs/architecture.md).
+Community authors can use the enforced [`Deck format v1`](docs/deck-format.md)
+and the checked example in [`examples/ayn-thor-session.deck.json`](examples/ayn-thor-session.deck.json).
 Kubernetes uses External Secrets backed by Vault; never commit credentials or a
 signing keystore.
 
 ## Status
 
-Version 0.2.2 includes the public homepage, authenticated community library,
+Version 0.3.0 includes the public homepage, authenticated community library,
 Thor-friendly creator and corporate review queue, strict schema validation,
 local Deck installation/selection, a manifest-driven offline companion runtime,
-AI routing, opt-in exact-package game detection, native secondary-display
-presentation, Vault-backed ChatGPT authentication for the corporate Codex lane,
-Kubernetes manifests, and Obtainium-compatible APK hosting.
+text maps, persistent timers, read-only device telemetry, explicit companion
+stop controls, AI routing, opt-in exact-package game detection, native
+secondary-display presentation, Vault-backed ChatGPT authentication for the
+corporate Codex lane, Kubernetes manifests, and Obtainium-compatible APK hosting.
 Device-specific display arbitration remains a physical AYN Thor acceptance gate;
 SecondDeck therefore recommends matching Decks but never launches one
 automatically.

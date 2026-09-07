@@ -7,7 +7,9 @@
 - The Android `SecondDisplay` Capacitor plugin uses Android `DisplayManager`
   and a `Presentation` on compatible secondary displays. It accepts only a
   bounded declarative Deck payload and always loads the bundled companion page;
-  callers cannot choose arbitrary local files.
+  callers cannot choose arbitrary local files. A display listener dismisses the
+  presentation if that display disappears or powers off, and the user can stop
+  it explicitly from the primary UI.
 - Opt-in Android Usage Access reads only recent foreground package events. The
   client performs an exact package-name match against locally installed Decks
   and may select a match, but never opens a secondary presentation without a
@@ -19,8 +21,11 @@
   later move to a reviewed Git-backed catalog without changing the schema.
 - Reviewed Decks are installed into device-local storage. The selected Deck is
   passed to the secondary display as data and renders offline; notes and
-  checklist state stay on the device. A cached verified profile permits this
-  installed library to remain available through a network interruption.
+  checklist state and timer state stay on the device. A narrowly scoped native
+  bridge supplies read-only battery, thermal, memory, and refresh-rate samples
+  to performance widgets; navigation away from the bundled companion page is
+  blocked and HTTP(S) sources open externally. A cached verified profile permits
+  this installed library to remain available through a network interruption.
 - The Android packaging step removes website-hosted APK artifacts from the
   WebView bundle before Capacitor sync, preventing older releases from being
   recursively embedded in each new APK.
@@ -41,7 +46,8 @@ that private in-pod directory, which is discarded when the pod is replaced.
 - Sessions assert `email_verified` and expire after 30 days.
 - Deck schemas are strict and allow only known widget, permission, platform,
   device-profile, responsive-layout, artifact-kind, and HTTP(S) URL fields.
-  Unknown executable fields are rejected. Only verified corporate accounts can
+  Required widget capabilities and the source allowlist are enforced, and
+  unknown executable fields are rejected. Only verified corporate accounts can
   publish or reject a community submission.
 - Public users never reach Codex; company users never silently fall back to
   Ollama. Provider selection uses only the verified session email.

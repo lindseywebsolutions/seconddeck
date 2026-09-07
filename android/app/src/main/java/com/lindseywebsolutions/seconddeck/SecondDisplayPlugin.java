@@ -1,21 +1,29 @@
 package com.lindseywebsolutions.seconddeck;
 
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.AppOpsManager;
 import android.app.Presentation;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.hardware.display.DisplayManager;
 import android.net.Uri;
+import android.os.BatteryManager;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.os.Process;
 import android.provider.Settings;
 import android.util.Base64;
 import android.view.Display;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -27,6 +35,23 @@ import java.nio.charset.StandardCharsets;
 @CapacitorPlugin(name = "SecondDisplay")
 public class SecondDisplayPlugin extends Plugin {
     private CompanionPresentation presentation;
+    private DisplayManager displayManager;
+    private final DisplayManager.DisplayListener displayListener = new DisplayManager.DisplayListener() {
+        @Override public void onDisplayAdded(int displayId) {}
+        @Override public void onDisplayChanged(int displayId) {
+            if (presentation != null && presentation.getDisplay().getDisplayId() == displayId
+                && presentation.getDisplay().getState() != Display.STATE_ON) dismissPresentation();
+        }
+        @Override public void onDisplayRemoved(int displayId) {
+            if (presentation != null && presentation.getDisplay().getDisplayId() == displayId) dismissPresentation();
+        }
+    };
+
+    @Override
+    public void load() {
+        displayManager = (DisplayManager) getContext().getSystemService(Context.DISPLAY_SERVICE);
+        displayManager.registerDisplayListener(displayListener, null);
+    }
 
     @PluginMethod
     public void getDisplays(PluginCall call) {
@@ -61,8 +86,7 @@ public class SecondDisplayPlugin extends Plugin {
     }
 
     private JSObject displayState() {
-        DisplayManager manager = (DisplayManager) getContext().getSystemService(Context.DISPLAY_SERVICE);
-        Display[] displays = manager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION);
+        Display[] displays = displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION);
         JSArray result = new JSArray();
         for (Display display : displays) {
             JSObject item = new JSObject();
@@ -74,7 +98,17 @@ public class SecondDisplayPlugin extends Plugin {
         JSObject response = new JSObject();
         response.put("displays", result);
         response.put("isExtended", displays.length > 0);
+        response.put("companionVisible", presentation != null && presentation.isShowing());
         return response;
+    }
+
+    private void dismissPresentation() {
+        Activity activity = getActivity();
+        if (activity == null) return;
+        activity.runOnUiThread(() -> {
+            if (presentation != null) presentation.dismiss();
+            presentation = null;
+        });
     }
 
     private boolean hasUsageAccess() {
@@ -109,8 +143,7 @@ public class SecondDisplayPlugin extends Plugin {
 
     @PluginMethod
     public void showCompanion(PluginCall call) {
-        DisplayManager manager = (DisplayManager) getContext().getSystemService(Context.DISPLAY_SERVICE);
-        Display[] displays = manager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION);
+        Display[] displays = displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION);
         if (displays.length == 0) {
             call.reject("No secondary display is available");
             return;
@@ -135,10 +168,55 @@ public class SecondDisplayPlugin extends Plugin {
         });
     }
 
+    @PluginMethod
+    public void dismissCompanion(PluginCall call) {
+        dismissPresentation();
+        call.resolve();
+    }
+
     @Override
     protected void handleOnDestroy() {
-        if (presentation != null) presentation.dismiss();
-        presentation = null;
+        if (displayManager != null) displayManager.unregisterDisplayListener(displayListener);
+        dismissPresentation();
+    }
+
+    private static JSObject performanceSnapshot(Context context, Display display) {
+        JSObject result = new JSObject();
+        Intent battery = context.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        if (battery != null) {
+            int level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+            int scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+            if (level >= 0 && scale > 0) result.put("batteryPercent", level * 100.0 / scale);
+            int temperature = battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Integer.MIN_VALUE);
+            if (temperature != Integer.MIN_VALUE) result.put("batteryTemperatureC", temperature / 10.0);
+            int status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+            result.put("charging", status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL);
+        }
+        ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+        ActivityManager.MemoryInfo memory = new ActivityManager.MemoryInfo();
+        activityManager.getMemoryInfo(memory);
+        result.put("availableMemoryBytes", memory.availMem);
+        result.put("totalMemoryBytes", memory.totalMem);
+        if (display != null) result.put("refreshRateHz", display.getRefreshRate());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+            result.put("thermalStatus", powerManager.getCurrentThermalStatus());
+        }
+        result.put("sampledAt", System.currentTimeMillis());
+        return result;
+    }
+
+    private static class MetricsBridge {
+        private final Context context;
+        private final Display display;
+        MetricsBridge(Context context, Display display) {
+            this.context = context.getApplicationContext();
+            this.display = display;
+        }
+        @JavascriptInterface
+        public String snapshot() {
+            return performanceSnapshot(context, display).toString();
+        }
     }
 
     private static class CompanionPresentation extends Presentation {
@@ -157,6 +235,20 @@ public class SecondDisplayPlugin extends Plugin {
             settings.setAllowFileAccess(true);
             settings.setAllowContentAccess(false);
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+            settings.setSupportMultipleWindows(false);
+            webView.addJavascriptInterface(new MetricsBridge(getContext(), getDisplay()), "SecondDeckMetrics");
+            webView.setWebViewClient(new WebViewClient() {
+                private boolean handle(Uri uri) {
+                    if ("file".equals(uri.getScheme()) && "/android_asset/public/index.html".equals(uri.getPath())) return false;
+                    if ("https".equals(uri.getScheme()) || "http".equals(uri.getScheme())) {
+                        try { getContext().startActivity(new Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
+                        catch (Exception ignored) {}
+                    }
+                    return true;
+                }
+                @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) { return handle(request.getUrl()); }
+                @Override public boolean shouldOverrideUrlLoading(WebView view, String url) { return handle(Uri.parse(url)); }
+            });
             webView.loadUrl("file:///android_asset/public/index.html?mode=companion#deck=" + encodedDeck);
             setContentView(webView);
         }
