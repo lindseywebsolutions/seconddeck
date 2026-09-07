@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeDeck, decodeDeck, deckFromLocation, encodeDeck, installDeck, installedDecks, setActiveDeck, uninstallDeck } from '../src/deckRuntime.js';
+import { activeDeck, decodeDeck, deckForPackage, deckFromLocation, encodeDeck, installDeck, installedDecks, setActiveDeck, uninstallDeck } from '../src/deckRuntime.js';
 
 function memoryStorage() {
   const values = new Map();
@@ -41,5 +41,11 @@ describe('local Deck runtime', () => {
   it('rejects malformed or non-Deck companion payloads', () => {
     expect(decodeDeck('not-a-deck')).toBeNull();
     expect(deckFromLocation({ hash: '#deck=nope!' })).toBeNull();
+  });
+
+  it('matches an installed Deck to a detected package without partial-domain matches', () => {
+    const decks = [{ ...first, target: { packageNames: ['com.example.game'] } }];
+    expect(deckForPackage('COM.EXAMPLE.GAME', decks)?.id).toBe(first.id);
+    expect(deckForPackage('com.example.game.demo', decks)).toBeNull();
   });
 });

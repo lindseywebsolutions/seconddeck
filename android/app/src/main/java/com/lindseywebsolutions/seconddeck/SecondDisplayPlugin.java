@@ -1,10 +1,17 @@
 package com.lindseywebsolutions.seconddeck;
 
 import android.app.Activity;
+import android.app.AppOpsManager;
 import android.app.Presentation;
+import android.app.usage.UsageEvents;
+import android.app.usage.UsageStatsManager;
 import android.content.Context;
+import android.content.Intent;
 import android.hardware.display.DisplayManager;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Process;
+import android.provider.Settings;
 import android.util.Base64;
 import android.view.Display;
 import android.webkit.WebSettings;
@@ -23,6 +30,37 @@ public class SecondDisplayPlugin extends Plugin {
 
     @PluginMethod
     public void getDisplays(PluginCall call) {
+        call.resolve(displayState());
+    }
+
+    @PluginMethod
+    public void getRuntimeState(PluginCall call) {
+        JSObject response = displayState();
+        boolean usageAccess = hasUsageAccess();
+        response.put("usageAccessGranted", usageAccess);
+        if (usageAccess) {
+            JSObject foreground = recentForegroundApp();
+            if (foreground != null) {
+                response.put("foregroundPackage", foreground.getString("packageName"));
+                response.put("foregroundDetectedAt", foreground.optLong("detectedAt"));
+            }
+        }
+        call.resolve(response);
+    }
+
+    @PluginMethod
+    public void openUsageAccessSettings(PluginCall call) {
+        Activity activity = getActivity();
+        try {
+            Intent intent = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, Uri.parse("package:" + getContext().getPackageName()));
+            activity.startActivity(intent);
+            call.resolve();
+        } catch (Exception error) {
+            call.reject("Unable to open Android Usage Access settings", error);
+        }
+    }
+
+    private JSObject displayState() {
         DisplayManager manager = (DisplayManager) getContext().getSystemService(Context.DISPLAY_SERVICE);
         Display[] displays = manager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION);
         JSArray result = new JSArray();
@@ -36,7 +74,37 @@ public class SecondDisplayPlugin extends Plugin {
         JSObject response = new JSObject();
         response.put("displays", result);
         response.put("isExtended", displays.length > 0);
-        call.resolve(response);
+        return response;
+    }
+
+    private boolean hasUsageAccess() {
+        AppOpsManager manager = (AppOpsManager) getContext().getSystemService(Context.APP_OPS_SERVICE);
+        int mode = manager.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), getContext().getPackageName());
+        return mode == AppOpsManager.MODE_ALLOWED;
+    }
+
+    private JSObject recentForegroundApp() {
+        UsageStatsManager manager = (UsageStatsManager) getContext().getSystemService(Context.USAGE_STATS_SERVICE);
+        long end = System.currentTimeMillis();
+        UsageEvents events = manager.queryEvents(end - 30 * 60 * 1000L, end);
+        UsageEvents.Event event = new UsageEvents.Event();
+        String packageName = null;
+        long detectedAt = 0;
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event);
+            int type = event.getEventType();
+            if ((type == UsageEvents.Event.MOVE_TO_FOREGROUND || type == UsageEvents.Event.ACTIVITY_RESUMED)
+                && !getContext().getPackageName().equals(event.getPackageName())
+                && event.getTimeStamp() >= detectedAt) {
+                packageName = event.getPackageName();
+                detectedAt = event.getTimeStamp();
+            }
+        }
+        if (packageName == null) return null;
+        JSObject result = new JSObject();
+        result.put("packageName", packageName);
+        result.put("detectedAt", detectedAt);
+        return result;
     }
 
     @PluginMethod

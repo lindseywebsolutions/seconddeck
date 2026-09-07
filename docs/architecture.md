@@ -8,6 +8,11 @@
   and a `Presentation` on compatible secondary displays. It accepts only a
   bounded declarative Deck payload and always loads the bundled companion page;
   callers cannot choose arbitrary local files.
+- Opt-in Android Usage Access reads only recent foreground package events. The
+  client performs an exact package-name match against locally installed Decks
+  and may select a match, but never opens a secondary presentation without a
+  user action. This is intentionally conservative until Thor arbitration is
+  physically validated.
 - The Express API owns email login, signed sessions, Deck validation/storage,
   corporate review/publishing, and server-side AI routing.
 - A Longhorn PVC persists submitted Decks. Published Decks are seeded and can

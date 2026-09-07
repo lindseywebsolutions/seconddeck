@@ -52,6 +52,12 @@ export function activeDeck(storage) {
   return installedDecks(target).find((deck) => deck.id === id) || null;
 }
 
+export function deckForPackage(packageName, decks) {
+  const target = String(packageName || '').toLowerCase();
+  if (!target) return null;
+  return (decks || []).find((deck) => deck.target?.packageNames?.some((name) => String(name).toLowerCase() === target)) || null;
+}
+
 export function encodeDeck(deck) {
   const bytes = new TextEncoder().encode(JSON.stringify(deck));
   let binary = '';

@@ -77,6 +77,7 @@ textarea { resize:vertical; min-height:120px; }
 .dash-head h1,.builder h1,.assistant-page h1 { font-size:clamp(2.8rem,6vw,5rem); letter-spacing:-.07em; line-height:1; margin:20px 0 0; }
 .device-status { display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center; border:1px solid #263b36; background:rgba(120,228,196,.035); border-radius:9px; margin:48px 0 85px; padding:14px 18px; font:400 .68rem 'DM Mono'; color:#7f8d88; }
 .device-status strong { color:#bdd2ca; }
+.device-status>.text-button { color:var(--mint); font:500 .6rem 'DM Mono'; white-space:nowrap; }
 .section-title { display:flex; justify-content:space-between; align-items:end; margin-bottom:25px; }
 .section-title h2 { margin:8px 0 0; font-size:2rem; }
 .deck-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
@@ -173,7 +174,8 @@ legend { grid-column:1/-1; color:#aab8b3; font-size:.76rem; margin-bottom:10px; 
   .form-row { grid-template-columns:1fr; gap:0; }
   .dash-head { align-items:start; gap:30px; flex-direction:column; }
   .device-status { grid-template-columns:auto 1fr; }
-  .device-status span:last-child { grid-column:2; }
+  .device-status>span:nth-of-type(2) { grid-column:2; }
+  .device-status>.text-button { grid-column:2; justify-self:start; }
   .builder-copy { position:static; }
   footer { flex-direction:column; gap:10px; }
   .companion-shell { padding:14px; }

@@ -1,10 +1,10 @@
 import './styles.css';
 import { api, clearToken, getCachedProfile, getToken, setCachedProfile, setToken } from './auth.js';
-import { getDisplayState, openCompanionDisplay } from './native.js';
-import { activeDeck, deckFromLocation, installDeck, installedDecks, setActiveDeck, uninstallDeck } from './deckRuntime.js';
+import { getDisplayState, openCompanionDisplay, requestGameDetectionAccess } from './native.js';
+import { activeDeck, deckForPackage, deckFromLocation, installDeck, installedDecks, setActiveDeck, uninstallDeck } from './deckRuntime.js';
 
 const root = document.querySelector('#app');
-const state = { user: null, decks: [], installed: [], activeDeck: null, display: null, config: null, offline: false };
+const state = { user: null, decks: [], installed: [], activeDeck: null, detectedDeck: null, display: null, config: null, offline: false };
 const isCompanionMode = new URLSearchParams(location.search).get('mode') === 'companion';
 
 const icon = (name) => ({
@@ -84,12 +84,12 @@ function home() {
     <section class="hero"><div class="eyebrow"><span></span> Built first for AYN Thor</div>
       <h1>Your game up top.<br><em>Everything else below.</em></h1>
       <p class="lede">SecondDeck turns the screen you are not playing on into a living companion—guides, notes, timers, controls, and community-built Decks that stay out of your way.</p>
-      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="obtainium://app/%7B%22id%22%3A%22com.lindseywebsolutions.seconddeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLindseyWebSolutions%2Fseconddeck%22%2C%22author%22%3A%22Lindsey%20Web%20Solutions%22%2C%22name%22%3A%22SecondDeck%22%7D">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.2.0.apk'}">Download APK</a></div>
+      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="obtainium://app/%7B%22id%22%3A%22com.lindseywebsolutions.seconddeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLindseyWebSolutions%2Fseconddeck%22%2C%22author%22%3A%22Lindsey%20Web%20Solutions%22%2C%22name%22%3A%22SecondDeck%22%7D">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.2.1.apk'}">Download APK</a></div>
       <p class="obtainium">On your Thor? Use <strong>Add to Obtainium</strong> so the source is saved as SecondDeck, or install the signed APK directly.</p>
       <div class="device"><div class="screen screen-top"><div class="game-art"><span>NOW PLAYING</span><strong>YOUR GAME</strong></div></div><div class="hinge"></div><div class="screen screen-bottom"><div class="deck-preview"><div class="mini-card teal">ROUTE<small>North ridge → tower</small></div><div class="mini-card amber">TIMER<small>01:42:18</small></div><div class="mini-card wide">SESSION NOTES<small>Key found · East gate unlocked</small></div></div></div></div>
     </section>
     <section id="features" class="feature-section"><div><span class="section-num">01 / RUNTIME</span><h2>Useful when you need it.<br>Invisible when you don't.</h2></div><div class="feature-grid">
-      <article>${icon('layers')}<h3>Dual-screen aware</h3><p>Detects secondary displays and yields when a game already owns both screens.</p></article>
+      <article>${icon('layers')}<h3>Dual-screen aware</h3><p>Matches installed Decks to recently played games. Secondary-display launch always remains under your control.</p></article>
       <article>${icon('shield')}<h3>Safe by design</h3><p>Decks are validated data—not executable plugins. You decide every permission.</p></article>
       <article>${icon('spark')}<h3>AI, with a local lane</h3><p>Private Ollama assistance for community accounts; Codex for verified LWS members.</p></article>
     </div></section>
@@ -149,8 +149,9 @@ function deckCard(deck) {
 
 async function appPage() {
   if (!(await ensureUser())) return;
+  const runtimeMessage = state.detectedDeck ? `${state.detectedDeck.name} matched to ${state.display.foregroundPackage}` : state.display?.foregroundPackage ? `No installed Deck matches ${state.display.foregroundPackage}` : state.display?.usageAccessGranted ? 'Waiting for a supported game' : state.display?.native ? 'Game detection is off' : 'Web preview';
   root.innerHTML = pageShell(`<main class="dashboard"><section class="dash-head"><div><span class="eyebrow"><span></span> ${escapeHtml(state.user.email)}</span><h1>Your second screen,<br>ready when you are.</h1></div><button class="button" data-action="display" ${state.activeDeck ? '' : 'disabled'}>${state.activeDeck ? `Launch ${escapeHtml(state.activeDeck.name)}` : 'Install a Deck to launch'}</button></section>
-    <div class="device-status" id="device-status"><span class="pulse"></span><strong>${state.offline ? 'Offline library ready' : state.display?.isExtended ? 'Second display detected' : 'Ready for a second display'}</strong><span>${state.display?.native ? 'Android runtime' : 'Web preview'} · ${state.installed.length} installed · ${state.decks.length} available</span></div>
+    <div class="device-status" id="device-status"><span class="pulse"></span><strong>${state.offline ? 'Offline library ready' : state.display?.isExtended ? 'Second display detected' : 'Ready for a second display'}</strong><span>${escapeHtml(runtimeMessage)} · ${state.installed.length} installed · ${state.decks.length} available</span>${state.display?.native && !state.display?.usageAccessGranted ? '<button class="text-button" data-action="usage-access">Enable game detection</button>' : ''}</div>
     <section><div class="section-title"><div><span class="section-num">COMMUNITY LIBRARY</span><h2>Reviewed Decks</h2></div><a class="button ghost small" href="#/create">${icon('plus')} Create Deck</a></div><div class="deck-grid">${state.decks.map(deckCard).join('') || '<p class="empty-library">You are offline. Installed Decks remain available after the catalog reconnects.</p>'}</div></section></main>`, true);
 }
 
@@ -219,6 +220,8 @@ async function ensureUser() {
     state.offline = true;
     state.decks = state.installed;
   }
+  state.detectedDeck = deckForPackage(state.display?.foregroundPackage, state.installed);
+  if (state.detectedDeck && state.activeDeck?.id !== state.detectedDeck.id) state.activeDeck = setActiveDeck(state.detectedDeck.id);
   return true;
 }
 
@@ -235,6 +238,10 @@ document.addEventListener('click', async (event) => {
   const action = event.target.closest('[data-action]')?.dataset.action;
   if (action === 'logout') { await clearToken(); location.hash = '#/'; }
   if (action === 'close-preview') event.target.closest('dialog')?.close();
+  if (action === 'usage-access') {
+    try { await requestGameDetectionAccess(); document.querySelector('#device-status strong').textContent = 'Grant Usage Access, then return to SecondDeck.'; }
+    catch (error) { document.querySelector('#device-status strong').textContent = error.message; }
+  }
   if (action === 'preview') { const deck = findDeck(event.target.closest('[data-deck-id]').dataset.deckId); if (deck) previewDeck(deck); }
   if (action === 'install') {
     const deck = findDeck(event.target.closest('[data-deck-id]').dataset.deckId);
@@ -263,4 +270,5 @@ document.addEventListener('click', async (event) => {
   }
 });
 window.addEventListener('hashchange', route);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && location.hash === '#/app') appPage(); });
 route();
