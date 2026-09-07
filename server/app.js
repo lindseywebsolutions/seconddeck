@@ -6,6 +6,7 @@ import cors from 'cors';
 import { rateLimit } from 'express-rate-limit';
 import { requireUser } from './auth.js';
 import { validateDeck, widgetTypes } from './deckSchema.js';
+import { deckDraftPrompt, deckFromAiAnswer, parseDraftRequest } from './aiDeckDraft.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -26,9 +27,9 @@ export function createApp({ config, authService, aiService, deckStore, mailer })
     catch { res.status(503).json({ status: 'not-ready', email: 'unavailable' }); }
   });
   app.get('/api/config', (_req, res) => res.json({
-    name: 'SecondDeck', version: process.env.APP_VERSION || '0.5.0', login: 'email-code', widgetTypes,
+    name: 'SecondDeck', version: process.env.APP_VERSION || '0.6.0', login: 'email-code', widgetTypes,
     deckSchemaVersion: 1, deckFileFormats: ['json', 'yaml'], maxDeckFileBytes: 65_536,
-    downloadUrl: `${config.publicUrl}/downloads/seconddeck-v${process.env.APP_VERSION || '0.5.0'}.apk`,
+    downloadUrl: `${config.publicUrl}/downloads/seconddeck-v${process.env.APP_VERSION || '0.6.0'}.apk`,
     obtainiumSourceUrl: config.publicUrl
   }));
 
@@ -72,6 +73,14 @@ export function createApp({ config, authService, aiService, deckStore, mailer })
       const prompt = String(req.body?.prompt || '').trim();
       if (prompt.length < 3 || prompt.length > 2000) return res.status(400).json({ error: 'Prompt must be between 3 and 2,000 characters.' });
       res.json(await aiService.ask(req.user.email, prompt));
+    } catch (error) { next(error); }
+  });
+  app.post('/api/assistant/deck-draft', authenticated, aiLimiter, async (req, res, next) => {
+    try {
+      const request = parseDraftRequest(req.body);
+      if (!request.success) return res.status(400).json({ error: 'A Deck goal, Android package, and supported device profile are required.' });
+      const result = await aiService.ask(req.user.email, deckDraftPrompt(request.data));
+      res.json({ provider: result.provider, model: result.model, deck: deckFromAiAnswer(result.answer, request.data) });
     } catch (error) { next(error); }
   });
 

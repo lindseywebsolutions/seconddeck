@@ -12,7 +12,7 @@ describe('SecondDeck API', () => {
   beforeEach(async () => {
     temp = await fs.mkdtemp(path.join(os.tmpdir(), 'seconddeck-test-'));
     const authService = createAuthService({ secret: 'api-test-secret-that-is-more-than-thirty-two-characters', sendCode: async (_email, value) => { code = value; }, randomInt: () => 123456 });
-    const aiService = { providerForEmail: (email) => email.endsWith('@lindseywebsolutions.com') ? 'codex' : 'ollama', ask: vi.fn(async (email) => ({ provider: email.endsWith('@lindseywebsolutions.com') ? 'codex' : 'ollama', model: 'test', answer: 'ok' })) };
+    const aiService = { providerForEmail: (email) => email.endsWith('@lindseywebsolutions.com') ? 'codex' : 'ollama', ask: vi.fn(async (email, prompt) => ({ provider: email.endsWith('@lindseywebsolutions.com') ? 'codex' : 'ollama', model: 'test', answer: prompt.includes('JSON object') ? JSON.stringify({ name: 'Generated Session', description: 'A generated and validated handheld session layout.', columns: 2, widgets: [{ type: 'timer', title: 'Session timer' }, { type: 'notes', title: 'Notes' }] }) : 'ok' })) };
     app = createApp({
       config: { publicUrl: 'https://seconddeck.test' }, authService, aiService,
       deckStore: createDeckStore(temp), mailer: { verify: async () => true }
@@ -50,6 +50,16 @@ describe('SecondDeck API', () => {
     const companyToken = await login('jake@lindseywebsolutions.com');
     const companyResult = await request(app).post('/api/assistant').set('authorization', `Bearer ${companyToken}`).send({ prompt: 'Make a timer' }).expect(200);
     expect(companyResult.body.provider).toBe('codex');
+  });
+
+  it('requires login and returns only a validated AI Deck draft', async () => {
+    const body = { prompt: 'Build a timer and notes for a long RPG session.', packageName: 'com.example.rpg', deviceProfile: 'ayn-thor' };
+    await request(app).post('/api/assistant/deck-draft').send(body).expect(401);
+    const token = await login('creator@example.com');
+    const response = await request(app).post('/api/assistant/deck-draft').set('authorization', `Bearer ${token}`).send(body).expect(200);
+    expect(response.body).toMatchObject({ provider: 'ollama', model: 'test', deck: { schemaVersion: 1, name: 'Generated Session', target: { packageNames: ['com.example.rpg'] }, sources: [], permissions: ['external-display'], ai: { enabled: true } } });
+    expect(response.body.answer).toBeUndefined();
+    await request(app).post('/api/assistant/deck-draft').set('authorization', `Bearer ${token}`).send({ ...body, packageName: 'not a package' }).expect(400);
   });
 
   it('keeps submissions private until a company reviewer publishes them', async () => {

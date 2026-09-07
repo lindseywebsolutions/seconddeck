@@ -125,7 +125,7 @@ function home() {
     <section class="hero"><div class="eyebrow"><span></span> Built first for AYN Thor</div>
       <h1>Your game up top.<br><em>Everything else below.</em></h1>
       <p class="lede">SecondDeck turns the screen you are not playing on into a living companion—maps, guides, notes, persistent timers, read-only device telemetry, and community-built Decks that stay out of your way.</p>
-      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="obtainium://app/%7B%22id%22%3A%22com.lindseywebsolutions.seconddeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLindseyWebSolutions%2Fseconddeck%22%2C%22author%22%3A%22Lindsey%20Web%20Solutions%22%2C%22name%22%3A%22SecondDeck%22%7D">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.5.0.apk'}">Download APK</a></div>
+      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="obtainium://app/%7B%22id%22%3A%22com.lindseywebsolutions.seconddeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLindseyWebSolutions%2Fseconddeck%22%2C%22author%22%3A%22Lindsey%20Web%20Solutions%22%2C%22name%22%3A%22SecondDeck%22%7D">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.6.0.apk'}">Download APK</a></div>
       <p class="obtainium">On your Thor? Use <strong>Add to Obtainium</strong> so the source is saved as SecondDeck, or install the signed APK directly.</p>
       <div class="device"><div class="screen screen-top"><div class="game-art"><span>NOW PLAYING</span><strong>YOUR GAME</strong></div></div><div class="hinge"></div><div class="screen screen-bottom"><div class="deck-preview"><div class="mini-card teal">ROUTE<small>North ridge → tower</small></div><div class="mini-card amber">TIMER<small>01:42:18</small></div><div class="mini-card wide">SESSION NOTES<small>Key found · East gate unlocked</small></div></div></div></div>
     </section>
@@ -222,7 +222,7 @@ function previewDeck(deck) {
   dialog.id = 'deck-preview-dialog';
   dialog.className = 'deck-dialog';
   const installed = installedRevision(deck, state.installed);
-  dialog.innerHTML = `<button class="dialog-close" data-action="close-preview" aria-label="Close preview">×</button><span class="section-num">DECLARATIVE PREVIEW · v${escapeHtml(deck.version || 1)}</span><h2>${escapeHtml(deck.name)}</h2><p>${escapeHtml(deck.description)}</p><div class="preview-widgets">${deck.layout.widgets.map((widget) => `<article><small>${escapeHtml(widget.type)}</small><strong>${escapeHtml(widget.title)}</strong>${widget.content ? `<p>${escapeHtml(widget.content).replace(/\n/g, '<br>')}</p>` : ''}</article>`).join('')}</div><footer><span>${escapeHtml(deck.target.packageNames.join(' · '))}</span><span>${deck.layout.columns} column${deck.layout.columns === 1 ? '' : 's'}</span><span class="dialog-actions"><button class="text-button" data-action="export-deck" data-deck-id="${escapeHtml(deck.id)}">Export JSON ↓</button>${installed ? `<button class="text-button danger" data-action="uninstall" data-deck-id="${escapeHtml(installed.id)}">Remove local copy</button>` : ''}</span></footer>`;
+  dialog.innerHTML = `<button class="dialog-close" data-action="close-preview" aria-label="Close preview">×</button><span class="section-num">DECLARATIVE PREVIEW · v${escapeHtml(deck.version || 1)}</span><h2>${escapeHtml(deck.name)}</h2><p>${escapeHtml(deck.description)}</p><div class="preview-widgets">${deck.layout.widgets.map((widget) => `<article><small>${escapeHtml(widget.type)}</small><strong>${escapeHtml(widget.title)}</strong>${widget.content ? `<p>${escapeHtml(widget.content).replace(/\n/g, '<br>')}</p>` : ''}</article>`).join('')}</div><footer><span>${escapeHtml(deck.target.packageNames.join(' · '))}</span><span>${deck.layout.breakpoints?.[0]?.columns || deck.layout.columns} wide-screen column${(deck.layout.breakpoints?.[0]?.columns || deck.layout.columns) === 1 ? '' : 's'}</span><span class="dialog-actions"><button class="text-button" data-action="export-deck" data-deck-id="${escapeHtml(deck.id)}">Export JSON ↓</button>${deck.status === 'local' && !installed ? `<button class="text-button" data-action="install-preview" data-deck-id="${escapeHtml(deck.id)}">Install locally ↓</button>` : ''}${installed ? `<button class="text-button danger" data-action="uninstall" data-deck-id="${escapeHtml(installed.id)}">Remove local copy</button>` : ''}</span></footer>`;
   document.body.append(dialog);
   dialog.showModal();
 }
@@ -261,15 +261,23 @@ async function submitDeck(event) {
 }
 
 function assistantPage() {
-  root.innerHTML = pageShell(`<main class="assistant-page"><section><span class="section-num">OPTIONAL AI</span><h1>A companion,<br>not a copilot.</h1><p>Ask for a checklist, a layout idea, or help simplifying a Deck. SecondDeck never claims to see your live game.</p><div class="provider-note">${icon('shield')} Your verified account selects the provider on the server.</div></section><form id="assistant-form"><textarea name="prompt" minlength="3" maxlength="2000" required placeholder="Make me a two-column layout for a long RPG session…"></textarea><button class="button">Ask SecondDeck</button><article class="answer" hidden></article></form></main>`, true);
+  root.innerHTML = pageShell(`<main class="assistant-page"><section><span class="section-num">OPTIONAL AI</span><h1>Describe it.<br>Preview the Deck.</h1><p>Generate a safe declarative draft, inspect every widget, then install it locally. SecondDeck never claims to see your live game.</p><div class="provider-note">${icon('shield')} Your verified account selects the provider. Model output is rebuilt and strictly validated before preview.</div></section><form id="assistant-form"><label>Android package name<input name="packageName" required pattern="[A-Za-z][A-Za-z0-9_.]{2,199}" placeholder="com.example.game"></label><label>Device profile<select name="deviceProfile"><option value="ayn-thor">AYN Thor</option><option value="generic-dual-screen">Generic dual screen</option><option value="foldable">Foldable</option><option value="tablet-external">Tablet + display</option></select></label><label>What should this Deck help with?<textarea name="prompt" minlength="10" maxlength="1500" required placeholder="A two-column RPG session layout with route notes, a checklist, and a timer…"></textarea></label><button class="button">Generate Deck draft</button><article class="answer" hidden></article></form></main>`, true);
   document.querySelector('#assistant-form').addEventListener('submit', askAssistant);
 }
 
 async function askAssistant(event) {
-  event.preventDefault(); const button = event.currentTarget.querySelector('button'); const answer = event.currentTarget.querySelector('.answer'); button.disabled = true; button.textContent = 'Thinking…';
-  try { const result = await api('/api/assistant', { method: 'POST', body: JSON.stringify({ prompt: new FormData(event.currentTarget).get('prompt') }) }); answer.hidden = false; answer.innerHTML = `<small>${escapeHtml(result.provider)} · ${escapeHtml(result.model)}</small><p>${escapeHtml(result.answer).replace(/\n/g, '<br>')}</p>`; }
+  event.preventDefault(); const button = event.currentTarget.querySelector('button'); const answer = event.currentTarget.querySelector('.answer'); button.disabled = true; button.textContent = 'Building and validating…';
+  try {
+    const form = Object.fromEntries(new FormData(event.currentTarget));
+    const result = await api('/api/assistant/deck-draft', { method: 'POST', body: JSON.stringify(form) });
+    const deck = localDeck(result.deck, `AI draft · ${result.provider}`);
+    answer.hidden = false;
+    answer.innerHTML = `<small>${escapeHtml(result.provider)} · ${escapeHtml(result.model)} · validated</small><h3>${escapeHtml(deck.name)}</h3><p>${escapeHtml(deck.description)}</p><button class="text-button" type="button" data-action="preview-ai" data-deck-id="${escapeHtml(deck.id)}">Preview and install →</button>`;
+    state.previewDeck = deck;
+    previewDeck(deck);
+  }
   catch (error) { answer.hidden = false; answer.textContent = error.message; }
-  finally { button.disabled = false; button.textContent = 'Ask SecondDeck'; }
+  finally { button.disabled = false; button.textContent = 'Generate Deck draft'; }
 }
 
 async function ensureUser() {
@@ -329,6 +337,14 @@ document.addEventListener('click', async (event) => {
   if (action === 'export-deck') {
     const deck = findDeck(event.target.closest('[data-deck-id]').dataset.deckId);
     if (deck) await exportDeckFile(deck);
+  }
+  if (action === 'preview-ai') { if (state.previewDeck) previewDeck(state.previewDeck); }
+  if (action === 'install-preview') {
+    const deck = findDeck(event.target.closest('[data-deck-id]').dataset.deckId);
+    if (deck?.status === 'local') {
+      state.installed = installDeck(deck); state.activeDeck = activeDeck();
+      document.querySelector('#deck-preview-dialog')?.remove(); location.hash = '#/app';
+    }
   }
   if (action === 'preview-draft' || action === 'install-draft') {
     const form = event.target.closest('form'); const status = form?.querySelector('.form-status');

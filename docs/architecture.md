@@ -62,6 +62,11 @@ that private in-pod directory, which is discarded when the pod is replaced.
   catalog response.
 - Public users never reach Codex; company users never silently fall back to
   Ollama. Provider selection uses only the verified session email.
+- AI Deck generation accepts only a bounded goal, exact Android package, and
+  known device profile. Model output is untrusted: the server extracts a small
+  strict proposal, owns targets, permissions, sources, IDs, and AI metadata,
+  then applies the normal Deck validator. Drafts are previewed before an
+  explicit local install and are never published automatically.
 - The production pod runs as non-root with a read-only root filesystem, a
   default-deny network policy, and bounded CPU/memory/storage.
 
