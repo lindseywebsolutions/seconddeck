@@ -11,8 +11,8 @@ Decks are data packages and cannot ship executable native plugins.
 ## Install on an AYN Thor
 
 1. Open `https://seconddeck.lws-workspace.com` and tap **Add to Obtainium**.
-   The full-config deep link preserves the `SecondDeck` name while Obtainium's
-   HTML source support detects the versioned APK link.
+   The full-config deep link preserves the `SecondDeck` name and tracks signed
+   releases from `https://github.com/LindseyWebSolutions/seconddeck`.
 2. Or open that URL on the Thor and choose **Download APK**.
 3. Install the APK, launch SecondDeck, and sign in with the one-time code sent
    to your email.
