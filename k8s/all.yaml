@@ -108,7 +108,7 @@ metadata:
   namespace: seconddeck
 data:
   PORT: "4080"
-  APP_VERSION: "0.1.1"
+  APP_VERSION: "0.1.2"
   PUBLIC_URL: https://seconddeck.lws-workspace.com
   DATA_PATH: /app/data
   CORPORATE_EMAIL_DOMAIN: lindseywebsolutions.com
@@ -150,7 +150,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: codex-login
-          image: 192.168.0.31:30501/seconddeck@sha256:a579b4ed55684ccf60e8710e3a3857df905368678a9fd8535894ab3ff8123f30
+          image: 192.168.0.31:30501/seconddeck@sha256:e0b4d5ee3d5bc73eada96907c0b30b61ccabbcfd65aa396460e55faff5adcc04
           imagePullPolicy: IfNotPresent
           command: [/bin/sh, -ec]
           args:
@@ -180,7 +180,7 @@ spec:
               mountPath: /app/codex-home
       containers:
         - name: app
-          image: 192.168.0.31:30501/seconddeck@sha256:a579b4ed55684ccf60e8710e3a3857df905368678a9fd8535894ab3ff8123f30
+          image: 192.168.0.31:30501/seconddeck@sha256:e0b4d5ee3d5bc73eada96907c0b30b61ccabbcfd65aa396460e55faff5adcc04
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

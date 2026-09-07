@@ -8,7 +8,7 @@ COPY src ./src
 RUN npm run build
 
 FROM node:22.22.0-bookworm-slim AS runtime
-ARG APP_VERSION=0.1.1
+ARG APP_VERSION=0.1.2
 ENV NODE_ENV=production \
     PORT=4080 \
     APP_VERSION=${APP_VERSION} \

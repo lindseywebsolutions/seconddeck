@@ -46,7 +46,7 @@ signing keystore.
 
 ## Status
 
-Version 0.1.1 is an installable foundation: public homepage, authenticated Deck
+Version 0.1.2 is an installable foundation: public homepage, authenticated Deck
 library and Thor-friendly creator, strict schema validation, AI routing, native
 secondary-display detection/presentation, Kubernetes manifests, and
 Obtainium-compatible APK hosting. Automatic game detection and deeper device

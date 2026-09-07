@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#142326</color>
+    <color name="colorPrimaryDark">#081012</color>
+    <color name="colorAccent">#78E4C4</color>
+    <color name="seconddeck_background">#081012</color>
+</resources>
