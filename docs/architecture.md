@@ -29,8 +29,10 @@
 
 `SESSION_SECRET`, SMTP credentials, and Codex authentication are supplied only
 through Vault-backed External Secrets. Non-secret settings are in the
-Kubernetes ConfigMap. The Codex authentication file is mounted read-only at
-`/app/.codex/auth.json`.
+Kubernetes ConfigMap. At pod startup, an init container copies the dedicated
+read-only ChatGPT authentication secret into an ephemeral, writable Codex home.
+The application receives no OpenAI API key; Codex can refresh its session in
+that private in-pod directory, which is discarded when the pod is replaced.
 
 ## Security
 

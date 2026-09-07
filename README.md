@@ -46,11 +46,12 @@ signing keystore.
 
 ## Status
 
-Version 0.2.1 includes the public homepage, authenticated community library,
+Version 0.2.2 includes the public homepage, authenticated community library,
 Thor-friendly creator and corporate review queue, strict schema validation,
 local Deck installation/selection, a manifest-driven offline companion runtime,
 AI routing, opt-in exact-package game detection, native secondary-display
-presentation, Kubernetes manifests, and Obtainium-compatible APK hosting.
+presentation, Vault-backed ChatGPT authentication for the corporate Codex lane,
+Kubernetes manifests, and Obtainium-compatible APK hosting.
 Device-specific display arbitration remains a physical AYN Thor acceptance gate;
 SecondDeck therefore recommends matching Decks but never launches one
 automatically.

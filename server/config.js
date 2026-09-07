@@ -6,7 +6,7 @@ export const config = {
   corporateDomain: (process.env.CORPORATE_EMAIL_DOMAIN || 'lindseywebsolutions.com').toLowerCase(),
   ollamaUrl: process.env.OLLAMA_URL || 'http://ollama.lindseywebsolutions.svc.cluster.local:11434',
   ollamaModel: process.env.OLLAMA_MODEL || 'qwen2.5:7b-instruct',
-  codexModel: process.env.CODEX_MODEL || 'gpt-5.3-codex',
+  codexModel: process.env.CODEX_MODEL || 'gpt-5.6-sol',
   smtp: {
     host: process.env.SMTP_HOST || '',
     port: Number(process.env.SMTP_PORT || 587),

@@ -67,7 +67,7 @@ spec:
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
-  name: seconddeck-codex-api
+  name: seconddeck-codex-auth
   namespace: seconddeck
 spec:
   refreshInterval: 15m
@@ -75,7 +75,7 @@ spec:
     kind: ClusterSecretStore
     name: vault-backend
   target:
-    name: seconddeck-codex-api
+    name: seconddeck-codex-auth
     creationPolicy: Owner
     deletionPolicy: Retain
     template:
@@ -84,10 +84,10 @@ spec:
         labels:
           app.kubernetes.io/name: seconddeck
   data:
-    - secretKey: OPENAI_API_KEY
+    - secretKey: auth.json
       remoteRef:
-        key: lws/runtime/lws-office
-        property: OPENAI_API_KEY
+        key: seconddeck/codex-auth
+        property: auth.json
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -108,13 +108,13 @@ metadata:
   namespace: seconddeck
 data:
   PORT: "4080"
-  APP_VERSION: "0.2.1"
+  APP_VERSION: "0.2.2"
   PUBLIC_URL: https://seconddeck.lws-workspace.com
   DATA_PATH: /app/data
   CORPORATE_EMAIL_DOMAIN: lindseywebsolutions.com
   OLLAMA_URL: http://ollama.lindseywebsolutions.svc.cluster.local:11434
   OLLAMA_MODEL: qwen2.5:7b-instruct
-  CODEX_MODEL: gpt-5.3-codex
+  CODEX_MODEL: gpt-5.6-sol
   CODEX_HOME: /app/codex-home
 ---
 apiVersion: apps/v1
@@ -149,20 +149,15 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       initContainers:
-        - name: codex-login
-          image: 192.168.0.31:30501/seconddeck@sha256:d25ee4cde6cdc7fb4ca12cc7f0e596f05a016105dfc9e6690efa0cc7c196c134
+        - name: codex-auth-setup
+          image: 192.168.0.31:30501/seconddeck@sha256:0ec50a64078da09d0348af8b97f2c4c2e2fb6d52e307a30646ad0abfdd12bde1
           imagePullPolicy: IfNotPresent
           command: [/bin/sh, -ec]
           args:
             - |
               umask 077
-              printf '%s' "$OPENAI_API_KEY" | HOME=/app/codex-home CODEX_HOME=/app/codex-home codex login --with-api-key >/dev/null
-          env:
-            - name: OPENAI_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: seconddeck-codex-api
-                  key: OPENAI_API_KEY
+              cp /codex-auth/auth.json /app/codex-home/auth.json
+              printf 'forced_login_method = "chatgpt"\ncli_auth_credentials_store = "file"\n' > /app/codex-home/config.toml
           resources:
             requests:
               cpu: 50m
@@ -176,11 +171,14 @@ spec:
             capabilities:
               drop: [ALL]
           volumeMounts:
+            - name: codex-auth-secret
+              mountPath: /codex-auth
+              readOnly: true
             - name: codex-home
               mountPath: /app/codex-home
       containers:
         - name: app
-          image: 192.168.0.31:30501/seconddeck@sha256:d25ee4cde6cdc7fb4ca12cc7f0e596f05a016105dfc9e6690efa0cc7c196c134
+          image: 192.168.0.31:30501/seconddeck@sha256:0ec50a64078da09d0348af8b97f2c4c2e2fb6d52e307a30646ad0abfdd12bde1
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -236,6 +234,10 @@ spec:
         - name: codex-home
           emptyDir:
             sizeLimit: 512Mi
+        - name: codex-auth-secret
+          secret:
+            secretName: seconddeck-codex-auth
+            defaultMode: 0400
 ---
 apiVersion: v1
 kind: Service

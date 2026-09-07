@@ -8,7 +8,7 @@ COPY src ./src
 RUN npm run build
 
 FROM node:22.22.0-bookworm-slim AS runtime
-ARG APP_VERSION=0.2.1
+ARG APP_VERSION=0.2.2
 ENV NODE_ENV=production \
     PORT=4080 \
     APP_VERSION=${APP_VERSION} \
@@ -16,7 +16,7 @@ ENV NODE_ENV=production \
     HOME=/app
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/* \
-    && npm install --global @openai/codex \
+    && npm install --global @openai/codex@0.153.4 \
     && mkdir -p /app/data /app/.codex /app/public/downloads \
     && printf 'forced_login_method = "chatgpt"\ncli_auth_credentials_store = "file"\n' > /app/.codex/config.toml
 COPY package.json package-lock.json ./
