@@ -48,7 +48,7 @@ signing keystore.
 
 ## Status
 
-Version 0.7.2 includes the public homepage, authenticated GitHub-backed community library,
+Version 0.8.0 includes the public homepage, authenticated GitHub-backed community library,
 Thor-friendly creator and corporate review queue, strict schema validation,
 local Deck installation/selection, a manifest-driven offline companion runtime,
 text maps, persistent timers, read-only device telemetry, explicit companion
@@ -57,12 +57,15 @@ on-device draft preview/install, validated AI-assisted Deck generation and AI
 routing, startup-validated JSON/YAML catalog provenance, opt-in exact-package game detection,
 local exact-package display yield controls, native
 secondary-display presentation, Vault-backed ChatGPT authentication for the
-corporate Codex lane, Kubernetes manifests, and Obtainium-compatible APK hosting.
+corporate Codex lane, an on-device physical acceptance workflow, Kubernetes
+manifests, and Obtainium-compatible APK hosting.
 The Android package identifies itself as SecondDeck and includes the dual-screen
 mark for legacy and adaptive launchers; Obtainium displays it after installation.
 Automatic device-specific display arbitration remains a physical AYN Thor
 acceptance gate. SecondDeck never launches automatically and now lets users mark
 an app as owning both screens so every companion launch route yields to it.
+The authenticated **Device check** page runs a local lower-screen test and
+exports a privacy-safe report for the remaining Thor-only checks.
 
 ## License
 

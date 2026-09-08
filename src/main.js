@@ -4,9 +4,10 @@ import { closeCompanionDisplay, getDisplayState, openCompanionDisplay, requestGa
 import { activeDeck, deckForPackage, deckFromLocation, installDeck, installedDecks, setActiveDeck, setPackageYield, shouldYieldForPackage, uninstallDeck } from './deckRuntime.js';
 import { formatBytes, formatDuration, normalizePerformanceSnapshot, readTimerState, timerElapsed, toggleTimer } from './companionRuntime.js';
 import { hasDeckUpdate, installedRevision, localDeck, mergeCatalogWithInstalled, parsePortableDeck, portableDeck, serializeDeck } from './deckPortability.js';
+import { createDiagnosticReport, diagnosticChecks, diagnosticDeck, diagnosticProgress, normalizeDiagnosticDisplayState, readDiagnosticConfirmations, setDiagnosticConfirmation } from './deviceDiagnostics.js';
 
 const root = document.querySelector('#app');
-const state = { user: null, decks: [], installed: [], activeDeck: null, detectedDeck: null, yieldedPackage: null, previewDeck: null, display: null, config: null, offline: false };
+const state = { user: null, decks: [], installed: [], activeDeck: null, detectedDeck: null, yieldedPackage: null, previewDeck: null, display: null, diagnosticsDisplay: null, config: null, offline: false };
 const isCompanionMode = new URLSearchParams(location.search).get('mode') === 'companion';
 
 const icon = (name) => ({
@@ -19,7 +20,7 @@ const icon = (name) => ({
 
 function pageShell(content, nav = false) {
   return `<header class="nav"><a class="brand" href="#/">${icon('layers')}<span>SecondDeck</span></a>
-    <nav>${nav ? '<a href="#/app">Decks</a><a href="#/create">Create</a><a href="#/assistant">AI</a><button class="text-button" data-action="logout">Sign out</button>' : '<a href="#features">How it works</a><a href="#community">Community</a><a class="button small" href="#/login">Open SecondDeck</a>'}</nav></header>${content}`;
+    <nav>${nav ? '<a href="#/app">Decks</a><a href="#/create">Create</a><a href="#/assistant">AI</a><a href="#/diagnostics">Device check</a><button class="text-button" data-action="logout">Sign out</button>' : '<a href="#features">How it works</a><a href="#community">Community</a><a class="button small" href="#/login">Open SecondDeck</a>'}</nav></header>${content}`;
 }
 
 function safeSourceUrl(value) {
@@ -134,7 +135,7 @@ function home() {
     <section class="hero"><div class="eyebrow"><span></span> Built first for AYN Thor</div>
       <h1>Your game up top.<br><em>Everything else below.</em></h1>
       <p class="lede">SecondDeck turns the screen you are not playing on into a living companion—maps, guides, notes, persistent timers, read-only device telemetry, and community-built Decks that stay out of your way.</p>
-      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="obtainium://app/%7B%22id%22%3A%22com.lindseywebsolutions.seconddeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLindseyWebSolutions%2Fseconddeck%22%2C%22author%22%3A%22Lindsey%20Web%20Solutions%22%2C%22name%22%3A%22SecondDeck%22%7D">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.7.2.apk'}">Download APK</a></div>
+      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="obtainium://app/%7B%22id%22%3A%22com.lindseywebsolutions.seconddeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLindseyWebSolutions%2Fseconddeck%22%2C%22author%22%3A%22Lindsey%20Web%20Solutions%22%2C%22name%22%3A%22SecondDeck%22%7D">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.8.0.apk'}">Download APK</a></div>
       <p class="obtainium">On your Thor? Use <strong>Add to Obtainium</strong> so the source is saved as SecondDeck, or install the signed APK directly.</p>
       <div class="device"><div class="screen screen-top"><div class="game-art"><span>NOW PLAYING</span><strong>YOUR GAME</strong></div></div><div class="hinge"></div><div class="screen screen-bottom"><div class="deck-preview"><div class="mini-card teal">ROUTE<small>North ridge → tower</small></div><div class="mini-card amber">TIMER<small>01:42:18</small></div><div class="mini-card wide">SESSION NOTES<small>Key found · East gate unlocked</small></div></div></div></div>
     </section>
@@ -210,7 +211,7 @@ async function appPage() {
   const runtimeMessage = state.yieldedPackage ? `Yielding to ${state.yieldedPackage}; SecondDeck will not use its lower screen` : state.detectedDeck ? `${state.detectedDeck.name} matched to ${state.display.foregroundPackage}` : state.display?.foregroundPackage ? `No installed Deck matches ${state.display.foregroundPackage}` : state.display?.usageAccessGranted ? 'Waiting for a supported game' : state.display?.native ? 'Game detection is off' : 'Web preview';
   const canLaunch = Boolean(state.activeDeck && !state.yieldedPackage);
   root.innerHTML = pageShell(`<main class="dashboard"><section class="dash-head"><div><span class="eyebrow"><span></span> ${escapeHtml(state.user.email)}</span><h1>Your second screen,<br>ready when you are.</h1></div><button class="button" data-action="display" ${canLaunch ? '' : 'disabled'}>${state.yieldedPackage ? 'Yielding to current app' : state.activeDeck ? `Launch ${escapeHtml(state.activeDeck.name)}` : 'Install a Deck to launch'}</button></section>
-    <div class="device-status" id="device-status"><span class="pulse"></span><strong>${state.yieldedPackage ? 'Current app owns both screens' : state.offline ? 'Offline library ready' : state.display?.companionVisible ? 'Companion is running' : state.display?.isExtended ? 'Second display detected' : 'Ready for a second display'}</strong><span>${escapeHtml(runtimeMessage)} · ${state.installed.length} installed · ${state.decks.length} available</span><span class="device-actions">${state.display?.native && !state.display?.usageAccessGranted ? '<button class="text-button" data-action="usage-access">Enable game detection</button>' : ''}${state.display?.foregroundPackage ? state.yieldedPackage ? '<button class="text-button" data-action="allow-package">Allow companion for this app</button>' : '<button class="text-button" data-action="yield-package">Always yield for this app</button>' : ''}${state.display?.companionVisible ? '<button class="text-button stop" data-action="stop-display">Stop companion</button>' : ''}</span></div>
+    <div class="device-status" id="device-status"><span class="pulse"></span><strong>${state.yieldedPackage ? 'Current app owns both screens' : state.offline ? 'Offline library ready' : state.display?.companionVisible ? 'Companion is running' : state.display?.isExtended ? 'Second display detected' : 'Ready for a second display'}</strong><span>${escapeHtml(runtimeMessage)} · ${state.installed.length} installed · ${state.decks.length} available</span><span class="device-actions"><a class="text-button" href="#/diagnostics">Run Thor check</a>${state.display?.native && !state.display?.usageAccessGranted ? '<button class="text-button" data-action="usage-access">Enable game detection</button>' : ''}${state.display?.foregroundPackage ? state.yieldedPackage ? '<button class="text-button" data-action="allow-package">Allow companion for this app</button>' : '<button class="text-button" data-action="yield-package">Always yield for this app</button>' : ''}${state.display?.companionVisible ? '<button class="text-button stop" data-action="stop-display">Stop companion</button>' : ''}</span></div>
     <section><div class="section-title"><div><span class="section-num">COMMUNITY LIBRARY</span><h2>Reviewed and local Decks</h2></div><div class="library-actions"><button class="button ghost small" data-action="import-deck">Import JSON/YAML</button><a class="button ghost small" href="#/create">${icon('plus')} Create Deck</a><input id="deck-import" type="file" accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml" hidden></div></div><label class="library-search">Find a game or Deck<input id="deck-search" type="search" placeholder="Search name, description, or package…"></label><div class="deck-grid">${state.decks.map(deckCard).join('') || '<p class="empty-library">You are offline. Installed Decks remain available after the catalog reconnects.</p>'}</div></section></main>`, true);
   document.querySelector('#deck-search')?.addEventListener('input', filterDecks);
 }
@@ -218,6 +219,41 @@ async function appPage() {
 function filterDecks(event) {
   const query = String(event.currentTarget.value || '').trim().toLowerCase();
   document.querySelectorAll('[data-deck-search]').forEach((card) => { card.hidden = Boolean(query && !card.dataset.deckSearch.includes(query)); });
+}
+
+function diagnosticRuntimeRow(label, passed, detail) {
+  return `<li class="${passed ? 'passed' : ''}"><span aria-hidden="true">${passed ? '✓' : '○'}</span><div><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small></div></li>`;
+}
+
+async function diagnosticsPage() {
+  if (!(await ensureUser())) return;
+  state.diagnosticsDisplay = await getDisplayState();
+  const runtime = normalizeDiagnosticDisplayState(state.diagnosticsDisplay);
+  const confirmations = readDiagnosticConfirmations();
+  const progress = diagnosticProgress(confirmations);
+  const display = runtime.displays[0];
+  const dimensions = display?.widthPixels && display?.heightPixels ? `${display.widthPixels} × ${display.heightPixels}${display.refreshRateHz ? ` at ${display.refreshRateHz.toFixed(0)} Hz` : ''}` : 'Waiting for display metrics';
+  root.innerHTML = pageShell(`<main class="diagnostics-page"><section class="diagnostics-intro"><span class="section-num">PHYSICAL DEVICE CHECK</span><h1>Prove it on the Thor.</h1><p>This local workflow verifies the hardware behavior an emulator cannot: lower-screen placement, touch focus, game coexistence, rotation, sleep, display yield, and an in-place Obtainium update.</p><div class="provider-note">${icon('shield')} Reports omit your email, foreground package name, notes, and authentication data.</div></section>
+    <section class="diagnostics-panel"><div class="diagnostics-heading"><div><span class="section-num">LIVE RUNTIME</span><h2>${runtime.native ? 'Android runtime' : 'Browser preview'}</h2></div><button class="text-button" data-action="diagnostic-refresh">Refresh</button></div><ul class="runtime-checks">
+      ${diagnosticRuntimeRow('Native Android shell', runtime.native, runtime.native ? 'Capacitor bridge connected' : 'Open the installed Android app')}
+      ${diagnosticRuntimeRow('Secondary display', runtime.secondaryDisplayAvailable, runtime.secondaryDisplayAvailable ? `${runtime.secondaryDisplayCount} presentation display found · ${dimensions}` : 'Open the Thor and refresh')}
+      ${diagnosticRuntimeRow('Game detection permission', runtime.usageAccessGranted, runtime.usageAccessGranted ? (runtime.foregroundAppDetected ? 'Enabled · recent foreground app detected' : 'Enabled · waiting for a game') : 'Enable Usage Access from the Decks screen')}
+      ${diagnosticRuntimeRow('Test companion', runtime.companionVisible, runtime.companionVisible ? 'Presentation is visible' : 'Start the lower-screen test below')}
+    </ul><div class="diagnostic-actions"><button class="button" data-action="diagnostic-start" ${runtime.native && runtime.secondaryDisplayAvailable ? '' : 'disabled'}>Start lower-screen test</button><button class="button ghost" data-action="diagnostic-stop" ${runtime.companionVisible ? '' : 'disabled'}>Stop test</button></div><p class="form-status" id="diagnostic-status" role="status"></p></section>
+    <section class="diagnostics-panel manual"><div class="diagnostics-heading"><div><span class="section-num">THOR ACCEPTANCE</span><h2>${progress.complete} of ${progress.total} confirmed</h2></div><span class="status ${progress.passed ? 'published' : 'review'}">${progress.passed ? 'complete' : 'in progress'}</span></div><fieldset class="diagnostic-checks">${diagnosticChecks.map(({ id, label }) => `<label><input type="checkbox" data-diagnostic-check="${escapeHtml(id)}" ${confirmations[id] ? 'checked' : ''}><span>${escapeHtml(label)}</span></label>`).join('')}</fieldset><button class="button ghost" data-action="diagnostic-export">Export privacy-safe report</button></section></main>`, true);
+}
+
+async function exportDiagnosticReport() {
+  const report = createDiagnosticReport({ appVersion: state.config?.version, displayState: state.diagnosticsDisplay || await getDisplayState(), confirmations: readDiagnosticConfirmations() });
+  const name = `seconddeck-device-check-${new Date().toISOString().slice(0, 10)}.json`;
+  const file = new File([`${JSON.stringify(report, null, 2)}\n`], name, { type: 'application/json' });
+  if (navigator.share && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ title: 'SecondDeck device check', text: 'Privacy-safe SecondDeck physical acceptance report', files: [file] }); return; }
+    catch (error) { if (error.name === 'AbortError') return; }
+  }
+  const url = URL.createObjectURL(file); const link = document.createElement('a');
+  link.href = url; link.download = name; document.body.append(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
 function findDeck(id) {
@@ -336,7 +372,7 @@ async function route() {
   if (isCompanionMode) { await companion(); return; }
   const path = location.hash.slice(1) || '/';
   if (!state.config) state.config = await api('/api/config').catch(() => null);
-  if (path === '/') home(); else if (path === '/login') login(); else if (path === '/app') await appPage(); else if (path === '/create') { if (await ensureUser()) createPage(); } else if (path === '/assistant') { if (await ensureUser()) assistantPage(); } else home();
+  if (path === '/') home(); else if (path === '/login') login(); else if (path === '/app') await appPage(); else if (path === '/create') { if (await ensureUser()) createPage(); } else if (path === '/assistant') { if (await ensureUser()) assistantPage(); } else if (path === '/diagnostics') await diagnosticsPage(); else home();
 }
 
 document.addEventListener('click', async (event) => {
@@ -371,6 +407,22 @@ document.addEventListener('click', async (event) => {
   if (action === 'stop-display') {
     try { await closeCompanionDisplay(); await appPage(); }
     catch (error) { document.querySelector('#device-status strong').textContent = error.message; }
+  }
+  if (action === 'diagnostic-refresh') await diagnosticsPage();
+  if (action === 'diagnostic-start') {
+    const status = document.querySelector('#diagnostic-status');
+    try { await openCompanionDisplay(diagnosticDeck); await diagnosticsPage(); }
+    catch (error) { if (status) status.textContent = error.message; }
+  }
+  if (action === 'diagnostic-stop') {
+    const status = document.querySelector('#diagnostic-status');
+    try { await closeCompanionDisplay(); await diagnosticsPage(); }
+    catch (error) { if (status) status.textContent = error.message; }
+  }
+  if (action === 'diagnostic-export') {
+    const status = document.querySelector('#diagnostic-status');
+    try { await exportDiagnosticReport(); if (status) status.textContent = 'Device report exported locally.'; }
+    catch (error) { if (status) status.textContent = error.message; }
   }
   if (action === 'yield-package' || action === 'allow-package') {
     const packageName = state.display?.foregroundPackage;
@@ -408,6 +460,11 @@ document.addEventListener('click', async (event) => {
   }
 });
 document.addEventListener('change', async (event) => {
+  if (event.target.matches('[data-diagnostic-check]')) {
+    setDiagnosticConfirmation(event.target.dataset.diagnosticCheck, event.target.checked);
+    await diagnosticsPage();
+    return;
+  }
   if (event.target.id !== 'deck-import') return;
   const file = event.target.files?.[0];
   if (!file) return;

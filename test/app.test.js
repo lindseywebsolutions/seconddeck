@@ -43,7 +43,7 @@ describe('SecondDeck API', () => {
 
   it('advertises the portable Deck contract', async () => {
     const response = await request(app).get('/api/config').expect(200);
-    expect(response.body).toMatchObject({ deckSchemaVersion: 1, deckFileFormats: ['json', 'yaml'], maxDeckFileBytes: 65_536, catalog: { mode: 'git-release', directory: 'catalog' } });
+    expect(response.body).toMatchObject({ deckSchemaVersion: 1, deckFileFormats: ['json', 'yaml'], maxDeckFileBytes: 65_536, catalog: { mode: 'git-release', directory: 'catalog' }, obtainiumSourceUrl: 'https://github.com/lindseywebsolutions/seconddeck' });
   });
 
   it('derives the AI provider from the authenticated email', async () => {

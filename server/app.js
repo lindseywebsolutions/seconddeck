@@ -27,11 +27,11 @@ export function createApp({ config, authService, aiService, deckStore, mailer })
     catch { res.status(503).json({ status: 'not-ready', email: 'unavailable' }); }
   });
   app.get('/api/config', (_req, res) => res.json({
-    name: 'SecondDeck', version: process.env.APP_VERSION || '0.7.2', login: 'email-code', widgetTypes,
+    name: 'SecondDeck', version: process.env.APP_VERSION || '0.8.0', login: 'email-code', widgetTypes,
     deckSchemaVersion: 1, deckFileFormats: ['json', 'yaml'], maxDeckFileBytes: 65_536,
     catalog: { mode: 'git-release', repository: 'https://github.com/lindseywebsolutions/seconddeck', directory: 'catalog' },
-    downloadUrl: `${config.publicUrl}/downloads/seconddeck-v${process.env.APP_VERSION || '0.7.2'}.apk`,
-    obtainiumSourceUrl: config.publicUrl
+    downloadUrl: `${config.publicUrl}/downloads/seconddeck-v${process.env.APP_VERSION || '0.8.0'}.apk`,
+    obtainiumSourceUrl: 'https://github.com/lindseywebsolutions/seconddeck'
   }));
 
   app.post('/api/auth/request-code', authLimiter, async (req, res, next) => {

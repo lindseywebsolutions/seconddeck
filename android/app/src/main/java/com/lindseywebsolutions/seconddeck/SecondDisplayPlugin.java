@@ -93,6 +93,11 @@ public class SecondDisplayPlugin extends Plugin {
             item.put("id", display.getDisplayId());
             item.put("name", display.getName());
             item.put("state", display.getState());
+            Display.Mode mode = display.getMode();
+            item.put("widthPixels", mode.getPhysicalWidth());
+            item.put("heightPixels", mode.getPhysicalHeight());
+            item.put("refreshRateHz", display.getRefreshRate());
+            item.put("rotation", display.getRotation());
             result.put(item);
         }
         JSObject response = new JSObject();

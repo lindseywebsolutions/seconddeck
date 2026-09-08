@@ -71,7 +71,7 @@ input:focus,textarea:focus,select:focus { border-color:var(--mint); box-shadow:0
 textarea { resize:vertical; min-height:120px; }
 .auth-card .button,.builder-form>.button { width:100%; }
 .form-status { min-height:1.3em; margin:14px 0 0; color:var(--amber)!important; font-size:.78rem; }
-.dashboard,.builder,.assistant-page { max-width:1184px; margin:auto; padding:90px 28px; min-height:calc(100vh - 84px); }
+.dashboard,.builder,.assistant-page,.diagnostics-page { max-width:1184px; margin:auto; padding:90px 28px; min-height:calc(100vh - 84px); }
 .dash-head { display:flex; justify-content:space-between; align-items:flex-end; }
 .dash-head .eyebrow { justify-content:flex-start; }
 .dash-head h1,.builder h1,.assistant-page h1 { font-size:clamp(2.8rem,6vw,5rem); letter-spacing:-.07em; line-height:1; margin:20px 0 0; }
@@ -146,6 +146,27 @@ legend { grid-column:1/-1; color:#aab8b3; font-size:.76rem; margin-bottom:10px; 
 .answer p { margin:12px 0 0; }
 .answer h3 { margin:12px 0 0; }
 .answer .text-button { margin-top:16px; color:var(--mint); }
+.diagnostics-page { display:grid; grid-template-columns:.8fr 1.2fr; gap:22px; align-items:start; }
+.diagnostics-intro { grid-row:span 2; position:sticky; top:100px; padding-right:45px; }
+.diagnostics-intro h1 { font-size:clamp(2.8rem,6vw,5rem); letter-spacing:-.07em; line-height:1; margin:20px 0; }
+.diagnostics-intro>p { color:var(--muted); line-height:1.7; }
+.diagnostics-panel { border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:28px; }
+.diagnostics-heading { display:flex; justify-content:space-between; align-items:center; gap:20px; }
+.diagnostics-heading h2 { margin:7px 0 0; font-size:1.8rem; }
+.diagnostics-heading>.text-button { color:var(--mint); }
+.runtime-checks { list-style:none; padding:0; margin:25px 0; display:grid; gap:10px; }
+.runtime-checks li { display:flex; gap:12px; align-items:flex-start; padding:13px; border:1px solid #303a3d; border-radius:8px; background:#0a1113; }
+.runtime-checks li>span { display:grid; place-items:center; flex:0 0 22px; height:22px; border:1px solid #52605d; border-radius:50%; color:#7d8b87; }
+.runtime-checks li.passed>span { border-color:var(--mint); color:var(--mint); background:rgba(120,228,196,.08); }
+.runtime-checks strong,.runtime-checks small { display:block; }
+.runtime-checks strong { font-size:.79rem; }
+.runtime-checks small { margin-top:4px; color:var(--muted); font:400 .58rem/1.45 'DM Mono'; }
+.diagnostic-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.diagnostic-checks { display:grid; grid-template-columns:1fr; gap:9px; margin:25px 0; }
+.diagnostic-checks label { display:flex; gap:11px; align-items:flex-start; margin:0; padding:13px; border:1px solid #303a3d; border-radius:8px; background:#0a1113; cursor:pointer; }
+.diagnostic-checks input { width:auto; margin:2px 0 0; accent-color:var(--mint); }
+.diagnostic-checks span { color:#b8c4c0; font-size:.73rem; line-height:1.45; }
+.diagnostics-panel.manual>.button { width:100%; }
 .companion-mode body { background:#070b0c; }
 .companion-mode body:before { opacity:.1; }
 .companion-shell { min-height:100vh; padding:26px; display:flex; flex-direction:column; }
@@ -187,7 +208,7 @@ legend { grid-column:1/-1; color:#aab8b3; font-size:.76rem; margin-bottom:10px; 
   .device { height:320px; }
   .screen { height:145px; }
   .feature-section { margin-top:0; }
-  .feature-grid,.community,.builder,.assistant-page { grid-template-columns:1fr; }
+  .feature-grid,.community,.builder,.assistant-page,.diagnostics-page { grid-template-columns:1fr; }
   .feature-grid article,.feature-grid article+article { border-right:0; border-bottom:1px solid var(--line); padding:30px 0; min-height:0; }
   .community { margin-left:16px; margin-right:16px; padding:45px 25px; gap:40px; }
   .deck-grid { grid-template-columns:1fr; }
@@ -201,6 +222,7 @@ legend { grid-column:1/-1; color:#aab8b3; font-size:.76rem; margin-bottom:10px; 
   .device-status>.text-button { grid-column:2; justify-self:start; }
   .device-actions { grid-column:2; justify-content:flex-start; }
   .builder-copy { position:static; }
+  .diagnostics-intro { position:static; padding-right:0; }
   footer { flex-direction:column; gap:10px; }
   .companion-shell { padding:14px; }
 }
