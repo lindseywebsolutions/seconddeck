@@ -150,7 +150,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: codex-auth-setup
-          image: 192.168.0.31:30501/seconddeck@sha256:d6630c644a8ba603f970713ef40caab38b0c1a83175ccd29400ba292365dc5c2
+          image: 192.168.0.31:30501/seconddeck@sha256:399bbe319ab233c06c8381237b87ef2929c26c907a5c11ad66c78f36914f2c92
           imagePullPolicy: IfNotPresent
           command: [/bin/sh, -ec]
           args:
@@ -178,7 +178,7 @@ spec:
               mountPath: /app/codex-home
       containers:
         - name: app
-          image: 192.168.0.31:30501/seconddeck@sha256:d6630c644a8ba603f970713ef40caab38b0c1a83175ccd29400ba292365dc5c2
+          image: 192.168.0.31:30501/seconddeck@sha256:399bbe319ab233c06c8381237b87ef2929c26c907a5c11ad66c78f36914f2c92
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
