@@ -1,12 +1,13 @@
 import './styles.css';
 import { api, clearToken, getCachedProfile, getToken, setCachedProfile, setToken } from './auth.js';
-import { closeCompanionDisplay, getDisplayState, openCompanionDisplay, requestGameDetectionAccess } from './native.js';
+import { closeCompanionDisplay, getDisplayState, openCompanionDisplay, requestGameDetectionAccess, requestInputMethodAccess, selectInputMethod } from './native.js';
 import { activeDeck, deckForPackage, deckFromLocation, deckPermissionsGranted, grantDeckPermissions, installDeck, installedDecks, requiredDeckPermissions, revokeDeckPermissions, setActiveDeck, setPackageYield, shouldYieldForPackage, uninstallDeck } from './deckRuntime.js';
 import { formatBytes, formatDuration, normalizePerformanceSnapshot, readTimerState, timerElapsed, toggleTimer } from './companionRuntime.js';
 import { hasDeckUpdate, installedRevision, localDeck, mergeCatalogWithInstalled, parsePortableDeck, portableDeck, serializeDeck } from './deckPortability.js';
 import { createDiagnosticReport, diagnosticChecks, diagnosticDeck, diagnosticProgress, normalizeDiagnosticDisplayState, readDiagnosticConfirmations, setDiagnosticConfirmation } from './deviceDiagnostics.js';
 import { localizedDeck, safePackageIcon } from './deckLocalization.js';
 import { obtainiumImportUrl } from './obtainium.js';
+import { commitInputText, openInputMethodSettings, readInputBridgeStatus, sendInputKey, showInputMethodPicker } from './inputBridge.js';
 
 const root = document.querySelector('#app');
 const state = { user: null, decks: [], installed: [], activeDeck: null, detectedDeck: null, yieldedPackage: null, previewDeck: null, display: null, diagnosticsDisplay: null, config: null, offline: false };
@@ -43,7 +44,7 @@ const permissionDetails = {
   'external-display': ['Second display', 'Show this Deck on a connected lower screen only when you launch it.'],
   network: ['Reviewed links', 'Open only the HTTP(S) sources listed below in your external browser.'],
   performance: ['Device status', 'Read local battery, thermal, memory, and display refresh-rate values.'],
-  keyboard: ['Input references', 'Show keyboard or trackpad reference widgets. Format v1 cannot inject input into another app.']
+  keyboard: ['Companion input', 'Let keyboard widgets type into a focused Android text field after setup. Trackpad widgets remain unavailable on normal Android installs.']
 };
 
 function deckIdentity(deck) {
@@ -90,7 +91,59 @@ function widgetMarkup(widget, index) {
   const source = safeSourceUrl(widget.sourceUrl);
   if (widget.type === 'map') return `<article class="companion-widget map" data-widget-id="${id}"><small>${title}</small><pre>${escapeHtml(lines.join('\n') || 'Add route or map notes to this Deck.')}</pre>${source ? `<a class="widget-link" href="${escapeHtml(source)}" target="_blank" rel="noopener noreferrer">Open full map ↗</a>` : ''}</article>`;
   if (widget.type === 'performance') return `<article class="companion-widget performance" data-widget-id="${id}" data-performance><small>${title}</small><div class="metric-grid"><div><span>Battery</span><strong data-metric="battery">—</strong></div><div><span>Thermals</span><strong data-metric="thermal">—</strong></div><div><span>Memory free</span><strong data-metric="memory">—</strong></div><div><span>Refresh</span><strong data-metric="refresh">—</strong></div></div><p class="metric-note">Read-only device telemetry · updates locally</p></article>`;
+  if (widget.type === 'keyboard') {
+    const rows = ['1234567890', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm'].map((row) => `<div class="keyboard-row">${[...row].map((letter) => `<button type="button" data-input-letter="${letter}" disabled>${letter}</button>`).join('')}</div>`).join('');
+    const phrases = lines.slice(0, 6).map((line) => `<button type="button" class="quick-input" data-input-text="${escapeHtml(line)}" disabled>${escapeHtml(line)}</button>`).join('');
+    return `<article class="companion-widget keyboard" data-widget-id="${id}" data-input-keyboard><small>${title}</small><p class="input-status" data-input-status>Checking Android keyboard…</p><div class="input-setup"><button type="button" data-input-setup="settings">Enable keyboard</button><button type="button" data-input-setup="picker">Select keyboard</button></div>${phrases ? `<div class="quick-inputs">${phrases}</div>` : ''}<div class="keyboard-keys">${rows}<div class="keyboard-row keyboard-controls"><button type="button" data-input-shift disabled>Shift</button><button type="button" data-input-text=" " disabled>Space</button><button type="button" data-input-key="BACKSPACE" disabled>⌫</button><button type="button" data-input-key="ENTER" disabled>Enter</button></div></div></article>`;
+  }
+  if (widget.type === 'trackpad') return `<article class="companion-widget trackpad" data-widget-id="${id}"><small>${title}</small><strong>Pointer control unavailable</strong><p>Android reserves global mouse injection for qualifying system-role apps. SecondDeck will not request Accessibility control or pretend a Deck permission can bypass that boundary.</p></article>`;
   return `<article class="companion-widget ${escapeHtml(widget.type)}" data-widget-id="${id}"><small>${title}</small>${copy}${source ? `<a class="widget-link" href="${escapeHtml(source)}" target="_blank" rel="noopener noreferrer">Open source ↗</a>` : ''}</article>`;
+}
+
+function wireInputWidgets() {
+  document.querySelectorAll('[data-input-keyboard]').forEach((widget) => {
+    const statusLabel = widget.querySelector('[data-input-status]');
+    const settings = widget.querySelector('[data-input-setup="settings"]');
+    const picker = widget.querySelector('[data-input-setup="picker"]');
+    const commandButtons = [...widget.querySelectorAll('[data-input-letter],[data-input-text],[data-input-key],[data-input-shift]')];
+    let shifted = false;
+    const refresh = () => {
+      const status = readInputBridgeStatus();
+      const ready = status.available && status.enabled && status.selected && status.connected;
+      settings.hidden = status.enabled;
+      picker.hidden = !status.enabled;
+      picker.textContent = status.selected ? 'Switch keyboard' : 'Select keyboard';
+      commandButtons.forEach((button) => { button.disabled = !ready; });
+      statusLabel.textContent = !status.available ? 'Open this Deck in the installed Android app.'
+        : !status.enabled ? 'Enable SecondDeck Keyboard in Android settings.'
+          : !status.selected ? 'Select SecondDeck Keyboard from Android’s keyboard picker.'
+            : !status.connected ? 'Focus a text field in the upper app, then return here.'
+              : 'Connected to the focused Android text field.';
+    };
+    widget.addEventListener('click', (event) => {
+      const button = event.target.closest('button');
+      if (!button) return;
+      if (button.dataset.inputSetup === 'settings') { openInputMethodSettings(); return; }
+      if (button.dataset.inputSetup === 'picker') { showInputMethodPicker(); return; }
+      if ('inputShift' in button.dataset) {
+        shifted = !shifted;
+        button.classList.toggle('active', shifted);
+        widget.querySelectorAll('[data-input-letter]').forEach((letter) => { letter.textContent = shifted ? letter.dataset.inputLetter.toUpperCase() : letter.dataset.inputLetter; });
+        return;
+      }
+      const result = button.dataset.inputKey
+        ? sendInputKey(button.dataset.inputKey)
+        : commitInputText(button.dataset.inputLetter ? (shifted ? button.dataset.inputLetter.toUpperCase() : button.dataset.inputLetter) : button.dataset.inputText);
+      if (!result.ok) statusLabel.textContent = result.error || 'Input was not accepted.';
+      if (shifted && button.dataset.inputLetter) {
+        shifted = false;
+        widget.querySelector('[data-input-shift]')?.classList.remove('active');
+        widget.querySelectorAll('[data-input-letter]').forEach((letter) => { letter.textContent = letter.dataset.inputLetter; });
+      }
+    });
+    refresh();
+    setInterval(refresh, 1500);
+  });
 }
 
 async function readPerformanceSnapshot() {
@@ -149,6 +202,7 @@ function wireCompanionState(deck) {
     const refresh = async () => drawPerformance(widget, await readPerformanceSnapshot());
     refresh(); setInterval(refresh, 5000);
   });
+  wireInputWidgets();
 }
 
 async function companion() {
@@ -178,7 +232,7 @@ function home() {
     <section class="hero"><div class="eyebrow"><span></span> Built first for AYN Thor</div>
       <h1>Your game up top.<br><em>Everything else below.</em></h1>
       <p class="lede">SecondDeck turns the screen you are not playing on into a living companion—maps, guides, notes, persistent timers, read-only device telemetry, and community-built Decks that stay out of your way.</p>
-      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="${obtainiumImportUrl()}">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.10.0.apk'}">Download APK</a></div>
+      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="${obtainiumImportUrl()}">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.11.0.apk'}">Download APK</a></div>
       <p class="obtainium">On your Thor? Use <strong>Add to Obtainium</strong> so the source is saved as SecondDeck. Obtainium shows the embedded dual-screen logo after the first install.</p>
       <div class="device"><div class="screen screen-top"><div class="game-art"><span>NOW PLAYING</span><strong>YOUR GAME</strong></div></div><div class="hinge"></div><div class="screen screen-bottom"><div class="deck-preview"><div class="mini-card teal">ROUTE<small>North ridge → tower</small></div><div class="mini-card amber">TIMER<small>01:42:18</small></div><div class="mini-card wide">SESSION NOTES<small>Key found · East gate unlocked</small></div></div></div></div>
     </section>
@@ -262,7 +316,7 @@ async function appPage() {
   const canLaunch = Boolean(state.activeDeck && !state.yieldedPackage);
   const readyCount = state.installed.filter((deck) => deckPermissionsGranted(deck)).length;
   root.innerHTML = pageShell(`<main class="dashboard"><section class="dash-head"><div><span class="eyebrow"><span></span> ${escapeHtml(state.user.email)}</span><h1>Your second screen,<br>ready when you are.</h1></div><button class="button" data-action="display" ${canLaunch ? '' : 'disabled'}>${state.yieldedPackage ? 'Yielding to current app' : state.activeDeck ? `Launch ${escapeHtml(state.activeDeck.name)}` : 'Install a Deck to launch'}</button></section>
-    <div class="device-status" id="device-status"><span class="pulse"></span><strong>${state.yieldedPackage ? 'Current app owns both screens' : state.offline ? 'Offline library ready' : state.display?.companionVisible ? 'Companion is running' : state.display?.isExtended ? 'Second display detected' : 'Ready for a second display'}</strong><span>${escapeHtml(runtimeMessage)} · ${readyCount} ready of ${state.installed.length} installed · ${state.decks.length} available</span><span class="device-actions"><a class="text-button" href="#/diagnostics">Run Thor check</a>${state.display?.native && !state.display?.usageAccessGranted ? '<button class="text-button" data-action="usage-access">Enable game detection</button>' : ''}${state.display?.foregroundPackage ? state.yieldedPackage ? '<button class="text-button" data-action="allow-package">Allow companion for this app</button>' : '<button class="text-button" data-action="yield-package">Always yield for this app</button>' : ''}${state.display?.companionVisible ? '<button class="text-button stop" data-action="stop-display">Stop companion</button>' : ''}</span></div>
+    <div class="device-status" id="device-status"><span class="pulse"></span><strong>${state.yieldedPackage ? 'Current app owns both screens' : state.offline ? 'Offline library ready' : state.display?.companionVisible ? 'Companion is running' : state.display?.isExtended ? 'Second display detected' : 'Ready for a second display'}</strong><span>${escapeHtml(runtimeMessage)} · ${readyCount} ready of ${state.installed.length} installed · ${state.decks.length} available</span><span class="device-actions"><a class="text-button" href="#/diagnostics">Run Thor check</a>${state.display?.native && !state.display?.usageAccessGranted ? '<button class="text-button" data-action="usage-access">Enable game detection</button>' : ''}${state.display?.native && !state.display?.input?.enabled ? '<button class="text-button" data-action="input-settings">Enable SecondDeck Keyboard</button>' : ''}${state.display?.native && state.display?.input?.enabled && !state.display?.input?.selected ? '<button class="text-button" data-action="input-picker">Select SecondDeck Keyboard</button>' : ''}${state.display?.foregroundPackage ? state.yieldedPackage ? '<button class="text-button" data-action="allow-package">Allow companion for this app</button>' : '<button class="text-button" data-action="yield-package">Always yield for this app</button>' : ''}${state.display?.companionVisible ? '<button class="text-button stop" data-action="stop-display">Stop companion</button>' : ''}</span></div>
     <section><div class="section-title"><div><span class="section-num">COMMUNITY LIBRARY</span><h2>Reviewed and local Decks</h2></div><div class="library-actions"><button class="button ghost small" data-action="import-deck">Import JSON/YAML</button><a class="button ghost small" href="#/create">${icon('plus')} Create Deck</a><input id="deck-import" type="file" accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml" hidden></div></div><label class="library-search">Find a game or Deck<input id="deck-search" type="search" placeholder="Search name, description, or package…"></label><div class="deck-grid">${state.decks.map(deckCard).join('') || '<p class="empty-library">You are offline. Installed Decks remain available after the catalog reconnects.</p>'}</div></section></main>`, true);
   document.querySelector('#deck-search')?.addEventListener('input', filterDecks);
 }
@@ -283,6 +337,7 @@ async function diagnosticsPage() {
   const confirmations = readDiagnosticConfirmations();
   const progress = diagnosticProgress(confirmations);
   const display = runtime.displays[0];
+  const input = state.diagnosticsDisplay?.input || {};
   const dimensions = display?.widthPixels && display?.heightPixels ? `${display.widthPixels} × ${display.heightPixels}${display.refreshRateHz ? ` at ${display.refreshRateHz.toFixed(0)} Hz` : ''}` : 'Waiting for display metrics';
   root.innerHTML = pageShell(`<main class="diagnostics-page"><section class="diagnostics-intro"><span class="section-num">PHYSICAL DEVICE CHECK</span><h1>Prove it on the Thor.</h1><p>This local workflow verifies the hardware behavior an emulator cannot: lower-screen placement, touch focus, game coexistence, rotation, sleep, display yield, and an in-place Obtainium update.</p><div class="provider-note">${icon('shield')} Reports omit your email, foreground package name, notes, and authentication data.</div></section>
     <section class="diagnostics-panel"><div class="diagnostics-heading"><div><span class="section-num">LIVE RUNTIME</span><h2>${runtime.native ? 'Android runtime' : 'Browser preview'}</h2></div><button class="text-button" data-action="diagnostic-refresh">Refresh</button></div><ul class="runtime-checks">
@@ -291,6 +346,11 @@ async function diagnosticsPage() {
       ${diagnosticRuntimeRow('Game detection permission', runtime.usageAccessGranted, runtime.usageAccessGranted ? (runtime.foregroundAppDetected ? 'Enabled · recent foreground app detected' : 'Enabled · waiting for a game') : 'Enable Usage Access from the Decks screen')}
       ${diagnosticRuntimeRow('Test companion', runtime.companionVisible, runtime.companionVisible ? 'Presentation is visible' : 'Start the lower-screen test below')}
     </ul><div class="diagnostic-actions"><button class="button" data-action="diagnostic-start" ${runtime.native && runtime.secondaryDisplayAvailable ? '' : 'disabled'}>Start lower-screen test</button><button class="button ghost" data-action="diagnostic-stop" ${runtime.companionVisible ? '' : 'disabled'}>Stop test</button></div><p class="form-status" id="diagnostic-status" role="status"></p></section>
+    <section class="diagnostics-panel"><div class="diagnostics-heading"><div><span class="section-num">INPUT BRIDGE</span><h2>Focused text only</h2></div></div><ul class="runtime-checks">
+      ${diagnosticRuntimeRow('SecondDeck Keyboard enabled', input.enabled === true, input.enabled ? 'Enabled by you in Android settings' : 'Must be enabled explicitly in Android settings')}
+      ${diagnosticRuntimeRow('SecondDeck Keyboard selected', input.selected === true, input.selected ? 'Selected as the current Android input method' : 'Choose it from the Android keyboard picker')}
+      ${diagnosticRuntimeRow('Focused text field connected', input.connected === true, input.connected ? 'Companion keyboard can type into the focused upper-app field' : 'Open a text field in the upper app')}
+    </ul><div class="diagnostic-actions"><button class="button" data-action="input-settings" ${runtime.native ? '' : 'disabled'}>Keyboard settings</button><button class="button ghost" data-action="input-picker" ${runtime.native && input.enabled ? '' : 'disabled'}>Choose keyboard</button></div><p class="input-boundary">Trackpad injection is not exposed: Android reserves its virtual mouse API for system-role applications.</p></section>
     <section class="diagnostics-panel manual"><div class="diagnostics-heading"><div><span class="section-num">THOR ACCEPTANCE</span><h2>${progress.complete} of ${progress.total} confirmed</h2></div><span class="status ${progress.passed ? 'published' : 'review'}">${progress.passed ? 'complete' : 'in progress'}</span></div><fieldset class="diagnostic-checks">${diagnosticChecks.map(({ id, label }) => `<label><input type="checkbox" data-diagnostic-check="${escapeHtml(id)}" ${confirmations[id] ? 'checked' : ''}><span>${escapeHtml(label)}</span></label>`).join('')}</fieldset><button class="button ghost" data-action="diagnostic-export">Export privacy-safe report</button></section></main>`, true);
 }
 
@@ -462,6 +522,16 @@ document.addEventListener('click', async (event) => {
   if (action === 'usage-access') {
     try { await requestGameDetectionAccess(); document.querySelector('#device-status strong').textContent = 'Grant Usage Access, then return to SecondDeck.'; }
     catch (error) { document.querySelector('#device-status strong').textContent = error.message; }
+  }
+  if (action === 'input-settings') {
+    const status = document.querySelector('#diagnostic-status') || document.querySelector('#device-status strong');
+    try { await requestInputMethodAccess(); if (status) status.textContent = 'Enable SecondDeck Keyboard, then return and select it.'; }
+    catch (error) { if (status) status.textContent = error.message; }
+  }
+  if (action === 'input-picker') {
+    const status = document.querySelector('#diagnostic-status') || document.querySelector('#device-status strong');
+    try { await selectInputMethod(); if (status) status.textContent = 'Choose SecondDeck Keyboard, then focus a text field in the upper app.'; }
+    catch (error) { if (status) status.textContent = error.message; }
   }
   if (action === 'stop-display') {
     try { await closeCompanionDisplay(); await appPage(); }

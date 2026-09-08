@@ -33,9 +33,18 @@ stay on the device. Timers persist while stopped or running across companion
 reopens. Performance widgets expose only read-only battery, thermal, available
 memory, and display refresh-rate samples.
 
-Controls, keyboard, and trackpad manifests are reserved for reference layouts
-until a safe, explicit Android input permission design is physically validated.
-They do not inject input into another application in format v1.
+Keyboard widgets can use the installed Android app's opt-in input method after
+the player enables and selects **SecondDeck Keyboard** in Android settings. The
+native bridge is added only for a Deck that declares `keyboard`, accepts at most
+256 characters per command, exposes a fixed navigation-key allowlist, and sends
+input only through Android's current focused text connection. It cannot type
+into an app that does not expose a focused text field.
+
+Controls remain reference layouts. Trackpad manifests explain that pointer
+control is unavailable instead of requesting Accessibility control: Android's
+virtual mouse API is a system API requiring `CREATE_VIRTUAL_DEVICE`, which is
+not available to a normal Obtainium-installed app. Format v1 does not inject
+global touch or pointer events.
 
 ## Permissions and sources
 

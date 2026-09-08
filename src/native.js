@@ -15,6 +15,24 @@ export async function requestGameDetectionAccess() {
   return true;
 }
 
+export async function getInputState() {
+  if (!Capacitor.isNativePlatform()) return { native: false, available: false, enabled: false, selected: false, connected: false, trackpadSupported: false };
+  try { return { native: true, ...(await SecondDisplay.getInputState()) }; }
+  catch { return { native: true, available: false, enabled: false, selected: false, connected: false, trackpadSupported: false }; }
+}
+
+export async function requestInputMethodAccess() {
+  if (!Capacitor.isNativePlatform()) return false;
+  await SecondDisplay.openInputMethodSettings();
+  return true;
+}
+
+export async function selectInputMethod() {
+  if (!Capacitor.isNativePlatform()) return false;
+  await SecondDisplay.showInputMethodPicker();
+  return true;
+}
+
 export async function openCompanionDisplay(deck) {
   if (!deck) throw new Error('Install and activate a Deck first.');
   if (!Capacitor.isNativePlatform()) {

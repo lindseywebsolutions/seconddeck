@@ -19,6 +19,7 @@ import android.os.Process;
 import android.provider.Settings;
 import android.util.Base64;
 import android.view.Display;
+import android.view.inputmethod.InputMethodManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -31,6 +32,8 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.nio.charset.StandardCharsets;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 @CapacitorPlugin(name = "SecondDisplay")
 public class SecondDisplayPlugin extends Plugin {
@@ -70,7 +73,33 @@ public class SecondDisplayPlugin extends Plugin {
                 response.put("foregroundDetectedAt", foreground.optLong("detectedAt"));
             }
         }
+        response.put("input", inputState());
         call.resolve(response);
+    }
+
+    @PluginMethod
+    public void getInputState(PluginCall call) {
+        call.resolve(inputState());
+    }
+
+    @PluginMethod
+    public void openInputMethodSettings(PluginCall call) {
+        try {
+            getActivity().startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS));
+            call.resolve();
+        } catch (Exception error) {
+            call.reject("Unable to open Android keyboard settings", error);
+        }
+    }
+
+    @PluginMethod
+    public void showInputMethodPicker(PluginCall call) {
+        Activity activity = getActivity();
+        activity.runOnUiThread(() -> {
+            InputMethodManager manager = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
+            manager.showInputMethodPicker();
+            call.resolve();
+        });
     }
 
     @PluginMethod
@@ -104,6 +133,21 @@ public class SecondDisplayPlugin extends Plugin {
         response.put("displays", result);
         response.put("isExtended", displays.length > 0);
         response.put("companionVisible", presentation != null && presentation.isShowing());
+        return response;
+    }
+
+    private JSObject inputState() {
+        return inputState(getContext());
+    }
+
+    private static JSObject inputState(Context context) {
+        JSObject response = new JSObject();
+        response.put("available", true);
+        response.put("enabled", SecondDeckInputMethodService.isEnabled(context));
+        response.put("selected", SecondDeckInputMethodService.isSelected(context));
+        response.put("connected", SecondDeckInputMethodService.hasConnection());
+        response.put("trackpadSupported", false);
+        response.put("trackpadReason", "Android reserves global pointer injection for system-role applications.");
         return response;
     }
 
@@ -163,14 +207,33 @@ public class SecondDisplayPlugin extends Plugin {
             call.reject("Deck data exceeds the 64 KiB companion limit");
             return;
         }
+        boolean inputAllowed = deckAllowsKeyboard(deck);
         String encodedDeck = Base64.encodeToString(deckJson.getBytes(StandardCharsets.UTF_8), Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
         Activity activity = getActivity();
         activity.runOnUiThread(() -> {
             if (presentation != null) presentation.dismiss();
-            presentation = new CompanionPresentation(activity, displays[0], encodedDeck);
+            presentation = new CompanionPresentation(activity, displays[0], encodedDeck, inputAllowed);
             presentation.show();
             call.resolve();
         });
+    }
+
+    private static boolean deckAllowsKeyboard(JSObject deck) {
+        JSONArray permissions = deck.optJSONArray("permissions");
+        if (permissions == null) return false;
+        boolean declared = false;
+        for (int index = 0; index < permissions.length(); index++) {
+            if ("keyboard".equals(permissions.optString(index))) declared = true;
+        }
+        if (!declared) return false;
+        JSONObject layout = deck.optJSONObject("layout");
+        JSONArray widgets = layout == null ? null : layout.optJSONArray("widgets");
+        if (widgets == null) return false;
+        for (int index = 0; index < widgets.length(); index++) {
+            JSONObject widget = widgets.optJSONObject(index);
+            if (widget != null && "keyboard".equals(widget.optString("type"))) return true;
+        }
+        return false;
     }
 
     @PluginMethod
@@ -224,11 +287,54 @@ public class SecondDisplayPlugin extends Plugin {
         }
     }
 
+    private static class InputBridge {
+        private final Context context;
+        InputBridge(Context context) {
+            this.context = context.getApplicationContext();
+        }
+        @JavascriptInterface
+        public String status() {
+            return inputState(context).toString();
+        }
+        @JavascriptInterface
+        public String commitText(String text) {
+            JSObject result = new JSObject();
+            boolean accepted = text != null && text.length() > 0 && text.length() <= 256
+                && SecondDeckInputMethodService.commitFromCompanion(text);
+            result.put("ok", accepted);
+            if (!accepted) result.put("error", "Select SecondDeck Keyboard and focus a text field in the upper app.");
+            return result.toString();
+        }
+        @JavascriptInterface
+        public String sendKey(String key) {
+            JSObject result = new JSObject();
+            boolean accepted = key != null && SecondDeckInputMethodService.sendKeyFromCompanion(key);
+            result.put("ok", accepted);
+            if (!accepted) result.put("error", "Select SecondDeck Keyboard and focus a text field in the upper app.");
+            return result.toString();
+        }
+        @JavascriptInterface
+        public void openKeyboardSettings() {
+            try {
+                context.startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (Exception ignored) {}
+        }
+        @JavascriptInterface
+        public void showKeyboardPicker() {
+            new android.os.Handler(context.getMainLooper()).post(() -> {
+                InputMethodManager manager = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
+                manager.showInputMethodPicker();
+            });
+        }
+    }
+
     private static class CompanionPresentation extends Presentation {
         private final String encodedDeck;
-        CompanionPresentation(Context context, Display display, String encodedDeck) {
+        private final boolean inputAllowed;
+        CompanionPresentation(Context context, Display display, String encodedDeck, boolean inputAllowed) {
             super(context, display);
             this.encodedDeck = encodedDeck;
+            this.inputAllowed = inputAllowed;
         }
         @Override
         protected void onCreate(Bundle savedInstanceState) {
@@ -242,6 +348,7 @@ public class SecondDisplayPlugin extends Plugin {
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
             settings.setSupportMultipleWindows(false);
             webView.addJavascriptInterface(new MetricsBridge(getContext(), getDisplay()), "SecondDeckMetrics");
+            if (inputAllowed) webView.addJavascriptInterface(new InputBridge(getContext()), "SecondDeckInput");
             webView.setWebViewClient(new WebViewClient() {
                 private boolean handle(Uri uri) {
                     if ("file".equals(uri.getScheme()) && "/android_asset/public/index.html".equals(uri.getPath())) return false;

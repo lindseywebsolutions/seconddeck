@@ -7,6 +7,7 @@ export const diagnosticChecks = [
   { id: 'rotation', label: 'The companion remains usable after opening and closing the Thor.' },
   { id: 'suspend-resume', label: 'The companion recovers after sleep and resume.' },
   { id: 'yield-restore', label: 'A marked dual-screen app receives both screens, then SecondDeck can launch again.' },
+  { id: 'keyboard-input', label: 'A keyboard Deck types into a focused text field in the upper app only after SecondDeck Keyboard is enabled and selected.' },
   { id: 'obtainium-update', label: 'Obtainium updated SecondDeck in place without uninstalling it.' }
 ];
 
@@ -62,6 +63,13 @@ export function normalizeDiagnosticDisplayState(value = {}) {
     companionVisible: value.companionVisible === true,
     usageAccessGranted: value.usageAccessGranted === true,
     foregroundAppDetected: typeof value.foregroundPackage === 'string' && value.foregroundPackage.length > 0,
+    input: {
+      available: value.input?.available === true,
+      enabled: value.input?.enabled === true,
+      selected: value.input?.selected === true,
+      connected: value.input?.connected === true,
+      trackpadSupported: value.input?.trackpadSupported === true
+    },
     displays
   };
 }

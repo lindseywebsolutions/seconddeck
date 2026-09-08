@@ -169,7 +169,7 @@ legend { grid-column:1/-1; color:#aab8b3; font-size:.76rem; margin-bottom:10px; 
 .answer h3 { margin:12px 0 0; }
 .answer .text-button { margin-top:16px; color:var(--mint); }
 .diagnostics-page { display:grid; grid-template-columns:.8fr 1.2fr; gap:22px; align-items:start; }
-.diagnostics-intro { grid-row:span 2; position:sticky; top:100px; padding-right:45px; }
+.diagnostics-intro { grid-row:span 3; position:sticky; top:100px; padding-right:45px; }
 .diagnostics-intro h1 { font-size:clamp(2.8rem,6vw,5rem); letter-spacing:-.07em; line-height:1; margin:20px 0; }
 .diagnostics-intro>p { color:var(--muted); line-height:1.7; }
 .diagnostics-panel { border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:28px; }
@@ -189,6 +189,7 @@ legend { grid-column:1/-1; color:#aab8b3; font-size:.76rem; margin-bottom:10px; 
 .diagnostic-checks input { width:auto; margin:2px 0 0; accent-color:var(--mint); }
 .diagnostic-checks span { color:#b8c4c0; font-size:.73rem; line-height:1.45; }
 .diagnostics-panel.manual>.button { width:100%; }
+.input-boundary { margin:16px 0 0; color:var(--muted); font:400 .61rem/1.55 'DM Mono'; }
 .companion-mode body { background:#070b0c; }
 .companion-mode body:before { opacity:.1; }
 .companion-shell { min-height:100vh; padding:26px; display:flex; flex-direction:column; }
@@ -210,6 +211,19 @@ legend { grid-column:1/-1; color:#aab8b3; font-size:.76rem; margin-bottom:10px; 
 .companion-widget.checklist input { width:auto; margin:0; accent-color:var(--mint); }
 .companion-widget.notes { display:flex; flex-direction:column; }
 .companion-widget.notes textarea { flex:1; min-height:60px; margin-top:10px; resize:none; }
+.companion-widget.keyboard { display:flex; flex-direction:column; gap:9px; }
+.input-status { min-height:1.5em; }
+.input-setup,.quick-inputs { display:flex; flex-wrap:wrap; gap:7px; }
+.input-setup button,.quick-input,.keyboard-row button { border:1px solid #40504c; color:#c7d3cf; background:#0a1113; border-radius:6px; padding:8px 10px; cursor:pointer; }
+.input-setup button { color:var(--mint); border-color:#42685d; }
+.quick-input { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--amber); border-color:#665737; }
+.keyboard-keys { display:grid; gap:6px; margin-top:auto; }
+.keyboard-row { display:flex; justify-content:center; gap:5px; }
+.keyboard-row button { flex:1 1 0; min-width:0; padding:9px 3px; text-transform:none; }
+.keyboard-row button:disabled,.input-setup button:disabled,.quick-input:disabled { opacity:.35; cursor:not-allowed; }
+.keyboard-row button.active { color:#07110e; border-color:var(--mint); background:var(--mint); }
+.keyboard-controls button:nth-child(2) { flex:3 1 0; }
+.companion-widget.trackpad strong { color:#8d9b97; }
 .companion-widget .empty-widget { font-style:italic; }
 .companion-widget.map pre { margin:14px 0 0; color:#c3d1cc; font:500 clamp(.68rem,1.5vw,.88rem)/1.55 'DM Mono',monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
 .metric-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; margin-top:14px; }

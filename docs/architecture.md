@@ -44,13 +44,20 @@
   Grants are bound to a stable Deck channel and exact revision, are never
   uploaded, and fail closed if storage is missing or altered. Revoking a grant
   also clears that Deck as the active companion.
+- A Deck granted the `keyboard` capability receives a second bundled-page-only
+  bridge. It can commit at most 256 characters or one key from a fixed
+  navigation allowlist through `SecondDeckInputMethodService`, and only while
+  the user has enabled and selected SecondDeck Keyboard and Android provides a
+  focused `InputConnection`. The app does not request Accessibility control.
+  Android's virtual mouse/keyboard device APIs require the system-only
+  `CREATE_VIRTUAL_DEVICE` permission, so trackpad widgets fail visibly closed.
 - The Android packaging step removes website-hosted APK artifacts from the
   WebView bundle before Capacitor sync, preventing older releases from being
   recursively embedded in each new APK.
 - The authenticated Device Check page launches a bundled, network-free test
   Deck and combines live native display state with explicit user confirmations
   for placement, touch focus, game coexistence, rotation, suspend/resume,
-  display yield, and Obtainium updates. Its exported report contains bounded
+  display yield, keyboard input, and Obtainium updates. Its exported report contains bounded
   display geometry and boolean results only; it omits email, foreground package
   names, device names, notes, and authentication state.
 
@@ -97,7 +104,7 @@ that private in-pod directory, which is discarded when the pod is replaced.
 An Android build and secondary-display API test do not prove AYN Thor behavior.
 Before calling Thor support complete, install the signed APK on a real Thor and
 verify display discovery, presentation placement, touch focus, game coexistence,
-rotation, suspend/resume, per-package yield and restore, and in-place Obtainium
-update. Open **Device check** inside the installed app to run the lower-screen
+rotation, suspend/resume, per-package yield and restore, focused-field keyboard
+input, and an in-place Obtainium update. Open **Device check** inside the installed app to run the lower-screen
 test and export the local acceptance report. The report supports review but does
 not replace observation on the physical device.

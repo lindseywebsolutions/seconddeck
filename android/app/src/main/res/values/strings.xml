@@ -4,4 +4,5 @@
     <string name="title_activity_main">SecondDeck</string>
     <string name="package_name">com.lindseywebsolutions.seconddeck</string>
     <string name="custom_url_scheme">com.lindseywebsolutions.seconddeck</string>
+    <string name="seconddeck_keyboard_name">SecondDeck Keyboard</string>
 </resources>

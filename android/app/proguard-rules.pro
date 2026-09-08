@@ -19,3 +19,12 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# The companion WebView loads only the bundled local page. Preserve its two
+# explicitly annotated, capability-scoped JavaScript bridges in release builds.
+-keepclassmembers class com.lindseywebsolutions.seconddeck.SecondDisplayPlugin$MetricsBridge {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keepclassmembers class com.lindseywebsolutions.seconddeck.SecondDisplayPlugin$InputBridge {
+    @android.webkit.JavascriptInterface <methods>;
+}

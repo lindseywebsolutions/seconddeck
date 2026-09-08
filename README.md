@@ -51,7 +51,7 @@ signing keystore.
 
 ## Status
 
-Version 0.10.0 includes the public homepage, authenticated GitHub-backed community library,
+Version 0.11.0 includes the public homepage, authenticated GitHub-backed community library,
 Thor-friendly creator and corporate review queue, strict schema validation,
 localized catalog packages with validated icons and README provenance, local
 Deck installation/selection, a manifest-driven offline companion runtime,
@@ -64,7 +64,10 @@ secondary-display presentation, Vault-backed ChatGPT authentication for the
 corporate Codex lane, an on-device physical acceptance workflow, Kubernetes
 manifests, Obtainium-compatible APK hosting, and device-local capability
 approval that is rechecked for every Deck revision and can be revoked without
-removing the Deck.
+removing the Deck. Keyboard widgets now connect through a user-enabled Android
+input method to the focused upper-app text field, with bounded text and a fixed
+key allowlist. Global trackpad injection remains deliberately unavailable
+because Android reserves the relevant API for system-role applications.
 The Android package identifies itself as SecondDeck and includes the dual-screen
 mark for legacy and adaptive launchers; Obtainium displays it after installation.
 Automatic device-specific display arbitration remains a physical AYN Thor
