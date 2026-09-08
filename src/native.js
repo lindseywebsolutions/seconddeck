@@ -16,9 +16,9 @@ export async function requestGameDetectionAccess() {
 }
 
 export async function getInputState() {
-  if (!Capacitor.isNativePlatform()) return { native: false, available: false, enabled: false, selected: false, connected: false, trackpadSupported: false };
+  if (!Capacitor.isNativePlatform()) return { native: false, available: false, enabled: false, selected: false, connected: false, trackpadSupported: false, trackpadEnabled: false, trackpadConnected: false, trackpadTargetActive: false };
   try { return { native: true, ...(await SecondDisplay.getInputState()) }; }
-  catch { return { native: true, available: false, enabled: false, selected: false, connected: false, trackpadSupported: false }; }
+  catch { return { native: true, available: false, enabled: false, selected: false, connected: false, trackpadSupported: false, trackpadEnabled: false, trackpadConnected: false, trackpadTargetActive: false }; }
 }
 
 export async function requestInputMethodAccess() {
@@ -30,6 +30,12 @@ export async function requestInputMethodAccess() {
 export async function selectInputMethod() {
   if (!Capacitor.isNativePlatform()) return false;
   await SecondDisplay.showInputMethodPicker();
+  return true;
+}
+
+export async function requestTrackpadAccess() {
+  if (!Capacitor.isNativePlatform()) return false;
+  await SecondDisplay.openTrackpadSettings();
   return true;
 }
 

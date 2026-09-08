@@ -1,13 +1,13 @@
 import './styles.css';
 import { api, clearToken, getCachedProfile, getToken, setCachedProfile, setToken } from './auth.js';
-import { closeCompanionDisplay, getDisplayState, openCompanionDisplay, requestGameDetectionAccess, requestInputMethodAccess, selectInputMethod } from './native.js';
+import { closeCompanionDisplay, getDisplayState, openCompanionDisplay, requestGameDetectionAccess, requestInputMethodAccess, requestTrackpadAccess, selectInputMethod } from './native.js';
 import { activeDeck, deckForPackage, deckFromLocation, deckPermissionsGranted, grantDeckPermissions, installDeck, installedDecks, requiredDeckPermissions, revokeDeckPermissions, setActiveDeck, setPackageYield, shouldYieldForPackage, uninstallDeck } from './deckRuntime.js';
 import { formatBytes, formatDuration, normalizePerformanceSnapshot, readTimerState, timerElapsed, toggleTimer } from './companionRuntime.js';
 import { hasDeckUpdate, installedRevision, localDeck, mergeCatalogWithInstalled, parsePortableDeck, portableDeck, serializeDeck } from './deckPortability.js';
 import { createDiagnosticReport, diagnosticChecks, diagnosticDeck, diagnosticProgress, normalizeDiagnosticDisplayState, readDiagnosticConfirmations, setDiagnosticConfirmation } from './deviceDiagnostics.js';
 import { localizedDeck, safePackageIcon, safePackageScreenshots } from './deckLocalization.js';
 import { obtainiumImportUrl } from './obtainium.js';
-import { commitInputText, openInputMethodSettings, readInputBridgeStatus, sendInputKey, showInputMethodPicker } from './inputBridge.js';
+import { commitInputText, openInputMethodSettings, openTrackpadSettings, readInputBridgeStatus, sendInputKey, sendTrackpadSwipe, sendTrackpadTap, showInputMethodPicker } from './inputBridge.js';
 
 const root = document.querySelector('#app');
 const state = { user: null, decks: [], installed: [], activeDeck: null, detectedDeck: null, yieldedPackage: null, previewDeck: null, display: null, diagnosticsDisplay: null, config: null, offline: false };
@@ -44,7 +44,8 @@ const permissionDetails = {
   'external-display': ['Second display', 'Show this Deck on a connected lower screen only when you launch it.'],
   network: ['Reviewed links', 'Open only the HTTP(S) sources listed below in your external browser.'],
   performance: ['Device status', 'Read local battery, thermal, memory, and display refresh-rate values.'],
-  keyboard: ['Companion input', 'Let keyboard widgets type into a focused Android text field after setup. Trackpad widgets remain unavailable on normal Android installs.']
+  keyboard: ['Companion keyboard', 'Type into a focused Android text field only after you enable and select SecondDeck Keyboard.'],
+  trackpad: ['Upper-screen touch', 'Send taps and swipes only to an exact target app after you enable SecondDeck Trackpad in Android Accessibility settings. Screen content is never read.']
 };
 
 function deckIdentity(deck) {
@@ -96,7 +97,7 @@ function widgetMarkup(widget, index) {
     const phrases = lines.slice(0, 6).map((line) => `<button type="button" class="quick-input" data-input-text="${escapeHtml(line)}" disabled>${escapeHtml(line)}</button>`).join('');
     return `<article class="companion-widget keyboard" data-widget-id="${id}" data-input-keyboard><small>${title}</small><p class="input-status" data-input-status>Checking Android keyboard…</p><div class="input-setup"><button type="button" data-input-setup="settings">Enable keyboard</button><button type="button" data-input-setup="picker">Select keyboard</button></div>${phrases ? `<div class="quick-inputs">${phrases}</div>` : ''}<div class="keyboard-keys">${rows}<div class="keyboard-row keyboard-controls"><button type="button" data-input-shift disabled>Shift</button><button type="button" data-input-text=" " disabled>Space</button><button type="button" data-input-key="BACKSPACE" disabled>⌫</button><button type="button" data-input-key="ENTER" disabled>Enter</button></div></div></article>`;
   }
-  if (widget.type === 'trackpad') return `<article class="companion-widget trackpad" data-widget-id="${id}"><small>${title}</small><strong>Pointer control unavailable</strong><p>Android reserves global mouse injection for qualifying system-role apps. SecondDeck will not request Accessibility control or pretend a Deck permission can bypass that boundary.</p></article>`;
+  if (widget.type === 'trackpad') return `<article class="companion-widget trackpad" data-widget-id="${id}" data-input-trackpad><small>${title}</small><p class="input-status" data-trackpad-status>Checking SecondDeck Trackpad…</p><div class="input-setup"><button type="button" data-input-setup="trackpad">Open Accessibility settings</button></div><div class="trackpad-surface" data-trackpad-surface role="application" aria-label="Upper-screen touch surface" aria-disabled="true"><span>Tap or drag to control the upper screen</span><i data-trackpad-crosshair hidden></i></div><p class="trackpad-boundary">Exact target app only · no screen-content access</p></article>`;
   return `<article class="companion-widget ${escapeHtml(widget.type)}" data-widget-id="${id}"><small>${title}</small>${copy}${source ? `<a class="widget-link" href="${escapeHtml(source)}" target="_blank" rel="noopener noreferrer">Open source ↗</a>` : ''}</article>`;
 }
 
@@ -141,6 +142,69 @@ function wireInputWidgets() {
         widget.querySelectorAll('[data-input-letter]').forEach((letter) => { letter.textContent = letter.dataset.inputLetter; });
       }
     });
+    refresh();
+    setInterval(refresh, 1500);
+  });
+  document.querySelectorAll('[data-input-trackpad]').forEach((widget) => {
+    const statusLabel = widget.querySelector('[data-trackpad-status]');
+    const settings = widget.querySelector('[data-input-setup="trackpad"]');
+    const surface = widget.querySelector('[data-trackpad-surface]');
+    const crosshair = widget.querySelector('[data-trackpad-crosshair]');
+    let ready = false;
+    let gesture = null;
+    const pointFor = (event) => {
+      const bounds = surface.getBoundingClientRect();
+      return {
+        x: Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)),
+        y: Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height))
+      };
+    };
+    const moveCrosshair = ({ x, y }) => {
+      crosshair.hidden = false;
+      crosshair.style.left = `${x * 100}%`;
+      crosshair.style.top = `${y * 100}%`;
+    };
+    const refresh = () => {
+      const status = readInputBridgeStatus();
+      ready = status.trackpadSupported && status.trackpadEnabled && status.trackpadConnected && status.trackpadTargetActive;
+      surface.setAttribute('aria-disabled', String(!ready));
+      surface.classList.toggle('ready', ready);
+      settings.textContent = status.trackpadEnabled ? 'Review Accessibility settings' : 'Enable SecondDeck Trackpad';
+      statusLabel.textContent = !status.available ? 'Open this Deck in the installed Android app.'
+        : !status.trackpadSupported ? status.trackpadReason
+          : !status.trackpadEnabled ? 'Enable SecondDeck Trackpad explicitly in Android Accessibility settings.'
+            : !status.trackpadConnected ? 'SecondDeck Trackpad is enabled but its service is not connected yet.'
+              : !status.trackpadTargetActive ? 'Open or switch to this Deck’s exact target app once.'
+                : 'Ready to send taps and swipes to the exact target app.';
+    };
+    settings.addEventListener('click', () => openTrackpadSettings());
+    surface.addEventListener('pointerdown', (event) => {
+      if (!ready || !event.isPrimary) return;
+      event.preventDefault();
+      const point = pointFor(event);
+      gesture = { ...point, startedAt: performance.now(), pointerId: event.pointerId };
+      surface.setPointerCapture(event.pointerId);
+      moveCrosshair(point);
+    });
+    surface.addEventListener('pointermove', (event) => {
+      if (!gesture || gesture.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      moveCrosshair(pointFor(event));
+    });
+    surface.addEventListener('pointerup', (event) => {
+      if (!gesture || gesture.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      const end = pointFor(event);
+      moveCrosshair(end);
+      const elapsed = Math.max(50, Math.min(1500, Math.round(performance.now() - gesture.startedAt)));
+      const distance = Math.hypot(end.x - gesture.x, end.y - gesture.y);
+      const result = distance < 0.015
+        ? sendTrackpadTap(end.x, end.y)
+        : sendTrackpadSwipe(gesture.x, gesture.y, end.x, end.y, elapsed);
+      gesture = null;
+      if (!result.ok) statusLabel.textContent = result.error || 'Trackpad gesture was not accepted.';
+    });
+    surface.addEventListener('pointercancel', () => { gesture = null; });
     refresh();
     setInterval(refresh, 1500);
   });
@@ -232,7 +296,7 @@ function home() {
     <section class="hero"><div class="eyebrow"><span></span> Built first for AYN Thor</div>
       <h1>Your game up top.<br><em>Everything else below.</em></h1>
       <p class="lede">SecondDeck turns the screen you are not playing on into a living companion—maps, guides, notes, persistent timers, read-only device telemetry, and community-built Decks that stay out of your way.</p>
-      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="${obtainiumImportUrl()}">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.12.0.apk'}">Download APK</a></div>
+      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="${obtainiumImportUrl()}">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.13.0.apk'}">Download APK</a></div>
       <p class="obtainium">On your Thor? Use <strong>Add to Obtainium</strong> so the source is saved as SecondDeck. Obtainium shows the embedded dual-screen logo after the first install.</p>
       <div class="device"><div class="screen screen-top"><div class="game-art"><span>NOW PLAYING</span><strong>YOUR GAME</strong></div></div><div class="hinge"></div><div class="screen screen-bottom"><div class="deck-preview"><div class="mini-card teal">ROUTE<small>North ridge → tower</small></div><div class="mini-card amber">TIMER<small>01:42:18</small></div><div class="mini-card wide">SESSION NOTES<small>Key found · East gate unlocked</small></div></div></div></div>
     </section>
@@ -348,11 +412,13 @@ async function diagnosticsPage() {
       ${diagnosticRuntimeRow('Game detection permission', runtime.usageAccessGranted, runtime.usageAccessGranted ? (runtime.foregroundAppDetected ? 'Enabled · recent foreground app detected' : 'Enabled · waiting for a game') : 'Enable Usage Access from the Decks screen')}
       ${diagnosticRuntimeRow('Test companion', runtime.companionVisible, runtime.companionVisible ? 'Presentation is visible' : 'Start the lower-screen test below')}
     </ul><div class="diagnostic-actions"><button class="button" data-action="diagnostic-start" ${runtime.native && runtime.secondaryDisplayAvailable ? '' : 'disabled'}>Start lower-screen test</button><button class="button ghost" data-action="diagnostic-stop" ${runtime.companionVisible ? '' : 'disabled'}>Stop test</button></div><p class="form-status" id="diagnostic-status" role="status"></p></section>
-    <section class="diagnostics-panel"><div class="diagnostics-heading"><div><span class="section-num">INPUT BRIDGE</span><h2>Focused text only</h2></div></div><ul class="runtime-checks">
+    <section class="diagnostics-panel"><div class="diagnostics-heading"><div><span class="section-num">INPUT BRIDGE</span><h2>Focused text + scoped touch</h2></div></div><ul class="runtime-checks">
       ${diagnosticRuntimeRow('SecondDeck Keyboard enabled', input.enabled === true, input.enabled ? 'Enabled by you in Android settings' : 'Must be enabled explicitly in Android settings')}
       ${diagnosticRuntimeRow('SecondDeck Keyboard selected', input.selected === true, input.selected ? 'Selected as the current Android input method' : 'Choose it from the Android keyboard picker')}
       ${diagnosticRuntimeRow('Focused text field connected', input.connected === true, input.connected ? 'Companion keyboard can type into the focused upper-app field' : 'Open a text field in the upper app')}
-    </ul><div class="diagnostic-actions"><button class="button" data-action="input-settings" ${runtime.native ? '' : 'disabled'}>Keyboard settings</button><button class="button ghost" data-action="input-picker" ${runtime.native && input.enabled ? '' : 'disabled'}>Choose keyboard</button></div><p class="input-boundary">Trackpad injection is not exposed: Android reserves its virtual mouse API for system-role applications.</p></section>
+      ${diagnosticRuntimeRow('SecondDeck Trackpad enabled', input.trackpadEnabled === true, input.trackpadEnabled ? (input.trackpadConnected ? 'Enabled and connected' : 'Enabled · waiting for Android to connect the service') : (input.trackpadSupported ? 'Must be enabled explicitly in Accessibility settings' : 'Requires Android 11 or newer'))}
+      ${diagnosticRuntimeRow('Exact target active', input.trackpadTargetActive === true, input.trackpadTargetActive ? 'Gestures are restricted to the approved target package' : 'Launch a trackpad Deck and switch to its exact target app')}
+    </ul><div class="diagnostic-actions input-diagnostic-actions"><button class="button" data-action="input-settings" ${runtime.native ? '' : 'disabled'}>Keyboard settings</button><button class="button ghost" data-action="input-picker" ${runtime.native && input.enabled ? '' : 'disabled'}>Choose keyboard</button><button class="button ghost" data-action="trackpad-settings" ${runtime.native && input.trackpadSupported ? '' : 'disabled'}>Trackpad settings</button></div><p class="input-boundary">Trackpad access is separately approved, observes package changes only, and cannot retrieve window content.</p></section>
     <section class="diagnostics-panel manual"><div class="diagnostics-heading"><div><span class="section-num">THOR ACCEPTANCE</span><h2>${progress.complete} of ${progress.total} confirmed</h2></div><span class="status ${progress.passed ? 'published' : 'review'}">${progress.passed ? 'complete' : 'in progress'}</span></div><fieldset class="diagnostic-checks">${diagnosticChecks.map(({ id, label }) => `<label><input type="checkbox" data-diagnostic-check="${escapeHtml(id)}" ${confirmations[id] ? 'checked' : ''}><span>${escapeHtml(label)}</span></label>`).join('')}</fieldset><button class="button ghost" data-action="diagnostic-export">Export privacy-safe report</button></section></main>`, true);
 }
 
@@ -421,7 +487,7 @@ function deckFromForm(formElement) {
   const form = new FormData(formElement); const name = form.get('name'); const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 64); const types = form.getAll('widgets');
   if (!types.length) throw new Error('Choose at least one widget.');
   const content = String(form.get('content') || '').trim(); const sourceUrl = String(form.get('sourceUrl') || '').trim(); const columns = Number(form.get('columns'));
-  const permissions = [...new Set([...(types.some((type) => ['keyboard', 'trackpad'].includes(type)) ? ['keyboard'] : []), ...(types.includes('performance') ? ['performance'] : []), ...(sourceUrl ? ['network'] : []), 'external-display'])];
+  const permissions = [...new Set([...(types.includes('keyboard') ? ['keyboard'] : []), ...(types.includes('trackpad') ? ['trackpad'] : []), ...(types.includes('performance') ? ['performance'] : []), ...(sourceUrl ? ['network'] : []), 'external-display'])];
   return portableDeck({ schemaVersion: 1, kind: 'deck', version: Number(form.get('version')), slug, name, description: form.get('description'), target: { packageNames: [form.get('packageName')], platforms: ['android'], deviceProfiles: [form.get('deviceProfile')] }, layout: { columns: 1, breakpoints: [{ minWidth: 700, columns }], widgets: types.map((type, index) => ({ id: `${type}-${index + 1}`, type, title: type[0].toUpperCase() + type.slice(1), ...(content && ['map', 'guide', 'checklist', 'controls', 'keyboard', 'trackpad'].includes(type) ? { content } : {}), ...(sourceUrl && ['map', 'guide', 'links'].includes(type) ? { sourceUrl } : {}) })) }, permissions, sources: sourceUrl ? [sourceUrl] : [], ai: { enabled: form.get('aiEnabled') === 'on', ...(form.get('aiEnabled') === 'on' ? { purpose: 'Assist with this Deck layout and session workflow.' } : {}) } });
 }
 
@@ -556,6 +622,11 @@ document.addEventListener('click', async (event) => {
   if (action === 'input-picker') {
     const status = document.querySelector('#diagnostic-status') || document.querySelector('#device-status strong');
     try { await selectInputMethod(); if (status) status.textContent = 'Choose SecondDeck Keyboard, then focus a text field in the upper app.'; }
+    catch (error) { if (status) status.textContent = error.message; }
+  }
+  if (action === 'trackpad-settings') {
+    const status = document.querySelector('#diagnostic-status') || document.querySelector('#device-status strong');
+    try { await requestTrackpadAccess(); if (status) status.textContent = 'Enable SecondDeck Trackpad explicitly, then return and open the target app once.'; }
     catch (error) { if (status) status.textContent = error.message; }
   }
   if (action === 'stop-display') {

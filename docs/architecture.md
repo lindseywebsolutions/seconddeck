@@ -48,16 +48,23 @@
   bridge. It can commit at most 256 characters or one key from a fixed
   navigation allowlist through `SecondDeckInputMethodService`, and only while
   the user has enabled and selected SecondDeck Keyboard and Android provides a
-  focused `InputConnection`. The app does not request Accessibility control.
-  Android's virtual mouse/keyboard device APIs require the system-only
-  `CREATE_VIRTUAL_DEVICE` permission, so trackpad widgets fail visibly closed.
+  focused `InputConnection`.
+- A Deck granted the separate `trackpad` capability can receive a bounded
+  bundled-page-only bridge after the player explicitly enables **SecondDeck
+  Trackpad** in Android Accessibility settings. The service declares no window
+  content access and consumes only window-state package metadata. Each tap or
+  swipe is normalized and dispatched to display 0 only while the last observed
+  foreground package exactly matches one of that active Deck's targets. Closing
+  the presentation clears the target session. Unsupported Android versions,
+  disabled/disconnected services, missing target events, malformed coordinates,
+  and nonmatching apps all fail closed.
 - The Android packaging step removes website-hosted APK artifacts from the
   WebView bundle before Capacitor sync, preventing older releases from being
   recursively embedded in each new APK.
 - The authenticated Device Check page launches a bundled, network-free test
   Deck and combines live native display state with explicit user confirmations
   for placement, touch focus, game coexistence, rotation, suspend/resume,
-  display yield, keyboard input, and Obtainium updates. Its exported report contains bounded
+  display yield, keyboard and scoped trackpad input, and Obtainium updates. Its exported report contains bounded
   display geometry and boolean results only; it omits email, foreground package
   names, device names, notes, and authentication state.
 
@@ -105,6 +112,6 @@ An Android build and secondary-display API test do not prove AYN Thor behavior.
 Before calling Thor support complete, install the signed APK on a real Thor and
 verify display discovery, presentation placement, touch focus, game coexistence,
 rotation, suspend/resume, per-package yield and restore, focused-field keyboard
-input, and an in-place Obtainium update. Open **Device check** inside the installed app to run the lower-screen
+input, exact-target trackpad input, and an in-place Obtainium update. Open **Device check** inside the installed app to run the lower-screen
 test and export the local acceptance report. The report supports review but does
 not replace observation on the physical device.

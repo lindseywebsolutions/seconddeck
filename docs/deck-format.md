@@ -40,16 +40,18 @@ native bridge is added only for a Deck that declares `keyboard`, accepts at most
 input only through Android's current focused text connection. It cannot type
 into an app that does not expose a focused text field.
 
-Controls remain reference layouts. Trackpad manifests explain that pointer
-control is unavailable instead of requesting Accessibility control: Android's
-virtual mouse API is a system API requiring `CREATE_VIRTUAL_DEVICE`, which is
-not available to a normal Obtainium-installed app. Format v1 does not inject
-global touch or pointer events.
+Controls remain reference layouts. Trackpad widgets expose a normalized
+upper-screen touch surface on Android 11 or newer. They use the separately
+user-enabled **SecondDeck Trackpad** Accessibility service to send bounded taps
+and swipes to display 0 only while the foreground package exactly matches the
+Deck allowlist. The service declares `canRetrieveWindowContent=false`, observes
+package changes only, and cannot inspect text, screenshots, or view trees.
 
 ## Permissions and sources
 
 Every runnable full Deck declares `external-display`. A `performance` widget also
-declares `performance`; `keyboard` or `trackpad` declares `keyboard`; and every
+declares `performance`; `keyboard` declares `keyboard`; `trackpad` declares the
+separately reviewed `trackpad` capability; and every
 widget with `sourceUrl` declares `network`. Each widget source must also appear
 in the top-level `sources` allowlist. Only HTTP(S) sources pass validation.
 

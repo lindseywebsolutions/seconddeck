@@ -197,6 +197,7 @@ legend { grid-column:1/-1; color:#aab8b3; font-size:.76rem; margin-bottom:10px; 
 .runtime-checks strong { font-size:.79rem; }
 .runtime-checks small { margin-top:4px; color:var(--muted); font:400 .58rem/1.45 'DM Mono'; }
 .diagnostic-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.input-diagnostic-actions { grid-template-columns:repeat(3,minmax(0,1fr)); }
 .diagnostic-checks { display:grid; grid-template-columns:1fr; gap:9px; margin:25px 0; }
 .diagnostic-checks label { display:flex; gap:11px; align-items:flex-start; margin:0; padding:13px; border:1px solid #303a3d; border-radius:8px; background:#0a1113; cursor:pointer; }
 .diagnostic-checks input { width:auto; margin:2px 0 0; accent-color:var(--mint); }
@@ -236,7 +237,14 @@ legend { grid-column:1/-1; color:#aab8b3; font-size:.76rem; margin-bottom:10px; 
 .keyboard-row button:disabled,.input-setup button:disabled,.quick-input:disabled { opacity:.35; cursor:not-allowed; }
 .keyboard-row button.active { color:#07110e; border-color:var(--mint); background:var(--mint); }
 .keyboard-controls button:nth-child(2) { flex:3 1 0; }
-.companion-widget.trackpad strong { color:#8d9b97; }
+.companion-widget.trackpad { display:flex; flex-direction:column; gap:9px; overflow:hidden; }
+.trackpad-surface { position:relative; flex:1; min-height:150px; display:grid; place-items:center; overflow:hidden; border:1px solid #40504c; border-radius:10px; background:radial-gradient(circle at center,rgba(120,228,196,.09),transparent 55%),repeating-linear-gradient(0deg,transparent 0 31px,rgba(105,130,123,.08) 32px),repeating-linear-gradient(90deg,transparent 0 31px,rgba(105,130,123,.08) 32px),#091012; color:#71817b; text-align:center; padding:20px; font:500 .62rem/1.5 'DM Mono',monospace; touch-action:none; user-select:none; opacity:.55; }
+.trackpad-surface.ready { opacity:1; border-color:#527d71; cursor:crosshair; }
+.trackpad-surface i { position:absolute; width:24px; height:24px; border:1px solid var(--mint); border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; box-shadow:0 0 0 5px rgba(120,228,196,.08); }
+.trackpad-surface i:before,.trackpad-surface i:after { content:''; position:absolute; background:var(--mint); }
+.trackpad-surface i:before { width:1px; height:32px; left:11px; top:-5px; }
+.trackpad-surface i:after { width:32px; height:1px; left:-5px; top:11px; }
+.trackpad-boundary { color:#70807b!important; font:400 .55rem/1.45 'DM Mono',monospace; }
 .companion-widget .empty-widget { font-style:italic; }
 .companion-widget.map pre { margin:14px 0 0; color:#c3d1cc; font:500 clamp(.68rem,1.5vw,.88rem)/1.55 'DM Mono',monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
 .metric-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; margin-top:14px; }
@@ -258,6 +266,7 @@ legend { grid-column:1/-1; color:#aab8b3; font-size:.76rem; margin-bottom:10px; 
   .screen { height:145px; }
   .feature-section { margin-top:0; }
   .feature-grid,.community,.builder,.assistant-page,.diagnostics-page { grid-template-columns:1fr; }
+  .input-diagnostic-actions { grid-template-columns:1fr; }
   .feature-grid article,.feature-grid article+article { border-right:0; border-bottom:1px solid var(--line); padding:30px 0; min-height:0; }
   .community { margin-left:16px; margin-right:16px; padding:45px 25px; gap:40px; }
   .deck-grid { grid-template-columns:1fr; }

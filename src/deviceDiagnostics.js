@@ -8,6 +8,7 @@ export const diagnosticChecks = [
   { id: 'suspend-resume', label: 'The companion recovers after sleep and resume.' },
   { id: 'yield-restore', label: 'A marked dual-screen app receives both screens, then SecondDeck can launch again.' },
   { id: 'keyboard-input', label: 'A keyboard Deck types into a focused text field in the upper app only after SecondDeck Keyboard is enabled and selected.' },
+  { id: 'trackpad-input', label: 'A trackpad Deck taps and swipes only its exact upper-screen target after SecondDeck Trackpad is enabled.' },
   { id: 'obtainium-update', label: 'Obtainium updated SecondDeck in place without uninstalling it.' }
 ];
 
@@ -68,7 +69,10 @@ export function normalizeDiagnosticDisplayState(value = {}) {
       enabled: value.input?.enabled === true,
       selected: value.input?.selected === true,
       connected: value.input?.connected === true,
-      trackpadSupported: value.input?.trackpadSupported === true
+      trackpadSupported: value.input?.trackpadSupported === true,
+      trackpadEnabled: value.input?.trackpadEnabled === true,
+      trackpadConnected: value.input?.trackpadConnected === true,
+      trackpadTargetActive: value.input?.trackpadTargetActive === true
     },
     displays
   };

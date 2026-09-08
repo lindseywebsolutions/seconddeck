@@ -26,4 +26,9 @@ describe('Deck manifest validation', () => {
     expect(validateDeck({ ...valid, layout: { columns: 1, widgets: [{ id: 'performance-1', type: 'performance', title: 'Device' }] } }).success).toBe(false);
     expect(validateDeck({ ...valid, sources: ['https://example.com/guide'], layout: { columns: 1, widgets: [{ id: 'guide-1', type: 'guide', title: 'Guide', sourceUrl: 'https://example.com/guide' }] } }).success).toBe(false);
   });
+  it('requires separately reviewed keyboard and trackpad capabilities', () => {
+    const trackpad = { ...valid, layout: { columns: 1, widgets: [{ id: 'trackpad-1', type: 'trackpad', title: 'Touch surface' }] } };
+    expect(validateDeck({ ...trackpad, permissions: ['external-display', 'keyboard'] }).success).toBe(false);
+    expect(validateDeck({ ...trackpad, permissions: ['external-display', 'trackpad'] }).success).toBe(true);
+  });
 });

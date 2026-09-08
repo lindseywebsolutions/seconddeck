@@ -3,7 +3,7 @@ const activeKey = 'seconddeck_active_deck_v1';
 const yieldedPackagesKey = 'seconddeck_yielded_packages_v1';
 const grantsKey = 'seconddeck_deck_grants_v1';
 const androidPackagePattern = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/i;
-export const deckPermissionTypes = ['external-display', 'network', 'performance', 'keyboard'];
+export const deckPermissionTypes = ['external-display', 'network', 'performance', 'keyboard', 'trackpad'];
 
 function parse(value, fallback) {
   try { return value ? JSON.parse(value) : fallback; }

@@ -5,4 +5,6 @@
     <string name="package_name">com.lindseywebsolutions.seconddeck</string>
     <string name="custom_url_scheme">com.lindseywebsolutions.seconddeck</string>
     <string name="seconddeck_keyboard_name">SecondDeck Keyboard</string>
+    <string name="seconddeck_trackpad_name">SecondDeck Trackpad</string>
+    <string name="seconddeck_trackpad_description">Lets an approved trackpad Deck send taps and swipes to its exact upper-screen target app. SecondDeck cannot read screen content.</string>
 </resources>

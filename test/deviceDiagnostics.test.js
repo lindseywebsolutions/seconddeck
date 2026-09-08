@@ -47,7 +47,7 @@ describe('physical device diagnostics', () => {
     expect(normalizeDiagnosticDisplayState({ native: 'yes', isExtended: true, displays: [{ widthPixels: -1, heightPixels: 999_999, refreshRateHz: 'fast', rotation: 9 }] })).toEqual({
       native: false, secondaryDisplayAvailable: true, secondaryDisplayCount: 1,
       companionVisible: false, usageAccessGranted: false, foregroundAppDetected: false,
-      input: { available: false, enabled: false, selected: false, connected: false, trackpadSupported: false },
+      input: { available: false, enabled: false, selected: false, connected: false, trackpadSupported: false, trackpadEnabled: false, trackpadConnected: false, trackpadTargetActive: false },
       displays: [{ state: null, widthPixels: null, heightPixels: null, refreshRateHz: null, rotation: null }]
     });
   });

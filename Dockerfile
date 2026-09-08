@@ -9,7 +9,7 @@ COPY server/deckSchema.js ./server/deckSchema.js
 RUN npm run build
 
 FROM node:22.22.0-bookworm-slim AS runtime
-ARG APP_VERSION=0.12.0
+ARG APP_VERSION=0.13.0
 ENV NODE_ENV=production \
     PORT=4080 \
     APP_VERSION=${APP_VERSION} \

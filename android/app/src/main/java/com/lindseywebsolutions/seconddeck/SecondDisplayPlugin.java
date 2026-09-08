@@ -32,6 +32,8 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -103,6 +105,16 @@ public class SecondDisplayPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void openTrackpadSettings(PluginCall call) {
+        try {
+            getActivity().startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+            call.resolve();
+        } catch (Exception error) {
+            call.reject("Unable to open Android Accessibility settings", error);
+        }
+    }
+
+    @PluginMethod
     public void openUsageAccessSettings(PluginCall call) {
         Activity activity = getActivity();
         try {
@@ -146,12 +158,19 @@ public class SecondDisplayPlugin extends Plugin {
         response.put("enabled", SecondDeckInputMethodService.isEnabled(context));
         response.put("selected", SecondDeckInputMethodService.isSelected(context));
         response.put("connected", SecondDeckInputMethodService.hasConnection());
-        response.put("trackpadSupported", false);
-        response.put("trackpadReason", "Android reserves global pointer injection for system-role applications.");
+        boolean trackpadSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R;
+        response.put("trackpadSupported", trackpadSupported);
+        response.put("trackpadEnabled", trackpadSupported && SecondDeckTrackpadService.isEnabled(context));
+        response.put("trackpadConnected", trackpadSupported && SecondDeckTrackpadService.hasConnection());
+        response.put("trackpadTargetActive", trackpadSupported && SecondDeckTrackpadService.targetActive());
+        response.put("trackpadReason", trackpadSupported
+            ? "Enable SecondDeck Trackpad explicitly in Android Accessibility settings. It observes package changes only and cannot read screen content."
+            : "SecondDeck Trackpad requires Android 11 or newer.");
         return response;
     }
 
     private void dismissPresentation() {
+        SecondDeckTrackpadService.clearSession();
         Activity activity = getActivity();
         if (activity == null) return;
         activity.runOnUiThread(() -> {
@@ -207,23 +226,27 @@ public class SecondDisplayPlugin extends Plugin {
             call.reject("Deck data exceeds the 64 KiB companion limit");
             return;
         }
-        boolean inputAllowed = deckAllowsKeyboard(deck);
+        boolean keyboardAllowed = deckAllowsWidget(deck, "keyboard", "keyboard");
+        boolean trackpadAllowed = deckAllowsWidget(deck, "trackpad", "trackpad");
+        List<String> targetPackages = deckTargetPackages(deck);
+        SecondDeckTrackpadService.clearSession();
         String encodedDeck = Base64.encodeToString(deckJson.getBytes(StandardCharsets.UTF_8), Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
         Activity activity = getActivity();
         activity.runOnUiThread(() -> {
             if (presentation != null) presentation.dismiss();
-            presentation = new CompanionPresentation(activity, displays[0], encodedDeck, inputAllowed);
+            if (trackpadAllowed) SecondDeckTrackpadService.configureSession(targetPackages);
+            presentation = new CompanionPresentation(activity, displays[0], encodedDeck, keyboardAllowed, trackpadAllowed);
             presentation.show();
             call.resolve();
         });
     }
 
-    private static boolean deckAllowsKeyboard(JSObject deck) {
+    private static boolean deckAllowsWidget(JSObject deck, String permission, String widgetType) {
         JSONArray permissions = deck.optJSONArray("permissions");
         if (permissions == null) return false;
         boolean declared = false;
         for (int index = 0; index < permissions.length(); index++) {
-            if ("keyboard".equals(permissions.optString(index))) declared = true;
+            if (permission.equals(permissions.optString(index))) declared = true;
         }
         if (!declared) return false;
         JSONObject layout = deck.optJSONObject("layout");
@@ -231,9 +254,23 @@ public class SecondDisplayPlugin extends Plugin {
         if (widgets == null) return false;
         for (int index = 0; index < widgets.length(); index++) {
             JSONObject widget = widgets.optJSONObject(index);
-            if (widget != null && "keyboard".equals(widget.optString("type"))) return true;
+            if (widget != null && widgetType.equals(widget.optString("type"))) return true;
         }
         return false;
+    }
+
+    private static List<String> deckTargetPackages(JSObject deck) {
+        List<String> result = new ArrayList<>();
+        JSONObject target = deck.optJSONObject("target");
+        JSONArray packageNames = target == null ? null : target.optJSONArray("packageNames");
+        if (packageNames == null) return result;
+        for (int index = 0; index < Math.min(packageNames.length(), 12); index++) {
+            String packageName = packageNames.optString(index, "");
+            if (SecondDeckTrackpadService.validPackageName(packageName.toLowerCase(java.util.Locale.ROOT))) {
+                result.add(packageName);
+            }
+        }
+        return result;
     }
 
     @PluginMethod
@@ -289,8 +326,12 @@ public class SecondDisplayPlugin extends Plugin {
 
     private static class InputBridge {
         private final Context context;
-        InputBridge(Context context) {
+        private final boolean keyboardAllowed;
+        private final boolean trackpadAllowed;
+        InputBridge(Context context, boolean keyboardAllowed, boolean trackpadAllowed) {
             this.context = context.getApplicationContext();
+            this.keyboardAllowed = keyboardAllowed;
+            this.trackpadAllowed = trackpadAllowed;
         }
         @JavascriptInterface
         public String status() {
@@ -299,7 +340,7 @@ public class SecondDisplayPlugin extends Plugin {
         @JavascriptInterface
         public String commitText(String text) {
             JSObject result = new JSObject();
-            boolean accepted = text != null && text.length() > 0 && text.length() <= 256
+            boolean accepted = keyboardAllowed && text != null && text.length() > 0 && text.length() <= 256
                 && SecondDeckInputMethodService.commitFromCompanion(text);
             result.put("ok", accepted);
             if (!accepted) result.put("error", "Select SecondDeck Keyboard and focus a text field in the upper app.");
@@ -308,33 +349,61 @@ public class SecondDisplayPlugin extends Plugin {
         @JavascriptInterface
         public String sendKey(String key) {
             JSObject result = new JSObject();
-            boolean accepted = key != null && SecondDeckInputMethodService.sendKeyFromCompanion(key);
+            boolean accepted = keyboardAllowed && key != null && SecondDeckInputMethodService.sendKeyFromCompanion(key);
             result.put("ok", accepted);
             if (!accepted) result.put("error", "Select SecondDeck Keyboard and focus a text field in the upper app.");
             return result.toString();
         }
         @JavascriptInterface
         public void openKeyboardSettings() {
+            if (!keyboardAllowed) return;
             try {
                 context.startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             } catch (Exception ignored) {}
         }
         @JavascriptInterface
         public void showKeyboardPicker() {
+            if (!keyboardAllowed) return;
             new android.os.Handler(context.getMainLooper()).post(() -> {
                 InputMethodManager manager = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
                 manager.showInputMethodPicker();
             });
         }
+        @JavascriptInterface
+        public String tap(float x, float y) {
+            JSObject result = new JSObject();
+            boolean accepted = trackpadAllowed && SecondDeckTrackpadService.tap(x, y);
+            result.put("ok", accepted);
+            if (!accepted) result.put("error", "Enable SecondDeck Trackpad, open the exact target app once, then try again.");
+            return result.toString();
+        }
+        @JavascriptInterface
+        public String swipe(float startX, float startY, float endX, float endY, int durationMs) {
+            JSObject result = new JSObject();
+            boolean accepted = trackpadAllowed
+                && SecondDeckTrackpadService.swipe(startX, startY, endX, endY, durationMs);
+            result.put("ok", accepted);
+            if (!accepted) result.put("error", "Enable SecondDeck Trackpad, open the exact target app once, then try again.");
+            return result.toString();
+        }
+        @JavascriptInterface
+        public void openTrackpadSettings() {
+            if (!trackpadAllowed) return;
+            try {
+                context.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (Exception ignored) {}
+        }
     }
 
     private static class CompanionPresentation extends Presentation {
         private final String encodedDeck;
-        private final boolean inputAllowed;
-        CompanionPresentation(Context context, Display display, String encodedDeck, boolean inputAllowed) {
+        private final boolean keyboardAllowed;
+        private final boolean trackpadAllowed;
+        CompanionPresentation(Context context, Display display, String encodedDeck, boolean keyboardAllowed, boolean trackpadAllowed) {
             super(context, display);
             this.encodedDeck = encodedDeck;
-            this.inputAllowed = inputAllowed;
+            this.keyboardAllowed = keyboardAllowed;
+            this.trackpadAllowed = trackpadAllowed;
         }
         @Override
         protected void onCreate(Bundle savedInstanceState) {
@@ -348,7 +417,9 @@ public class SecondDisplayPlugin extends Plugin {
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
             settings.setSupportMultipleWindows(false);
             webView.addJavascriptInterface(new MetricsBridge(getContext(), getDisplay()), "SecondDeckMetrics");
-            if (inputAllowed) webView.addJavascriptInterface(new InputBridge(getContext()), "SecondDeckInput");
+            if (keyboardAllowed || trackpadAllowed) {
+                webView.addJavascriptInterface(new InputBridge(getContext(), keyboardAllowed, trackpadAllowed), "SecondDeckInput");
+            }
             webView.setWebViewClient(new WebViewClient() {
                 private boolean handle(Uri uri) {
                     if ("file".equals(uri.getScheme()) && "/android_asset/public/index.html".equals(uri.getPath())) return false;

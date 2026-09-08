@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { allowedInputKeys, commitInputText, openInputMethodSettings, readInputBridgeStatus, sendInputKey, showInputMethodPicker } from '../src/inputBridge.js';
+import { allowedInputKeys, commitInputText, openInputMethodSettings, openTrackpadSettings, readInputBridgeStatus, sendInputKey, sendTrackpadSwipe, sendTrackpadTap, showInputMethodPicker } from '../src/inputBridge.js';
 
 describe('companion input bridge', () => {
   it('fails closed when the native bridge is absent or malformed', () => {
@@ -24,10 +24,30 @@ describe('companion input bridge', () => {
   });
 
   it('opens only explicit Android setup surfaces', () => {
-    const bridge = { openKeyboardSettings: vi.fn(), showKeyboardPicker: vi.fn() };
+    const bridge = { openKeyboardSettings: vi.fn(), showKeyboardPicker: vi.fn(), openTrackpadSettings: vi.fn() };
     expect(openInputMethodSettings(bridge)).toBe(true);
     expect(showInputMethodPicker(bridge)).toBe(true);
+    expect(openTrackpadSettings(bridge)).toBe(true);
     expect(bridge.openKeyboardSettings).toHaveBeenCalledOnce();
     expect(bridge.showKeyboardPicker).toHaveBeenCalledOnce();
+    expect(bridge.openTrackpadSettings).toHaveBeenCalledOnce();
+  });
+
+  it('bounds trackpad gestures and passes normalized values to the native bridge', () => {
+    const bridge = { tap: vi.fn(() => '{"ok":true}'), swipe: vi.fn(() => ({ ok: true })) };
+    expect(sendTrackpadTap(-0.1, 0.5, bridge).ok).toBe(false);
+    expect(sendTrackpadTap(0.25, 0.75, bridge)).toEqual({ ok: true });
+    expect(bridge.tap).toHaveBeenCalledWith(0.25, 0.75);
+    expect(sendTrackpadSwipe(0, 0, 1, 1, 49, bridge).ok).toBe(false);
+    expect(sendTrackpadSwipe(0.1, 0.2, 0.8, 0.9, 320.4, bridge)).toEqual({ ok: true });
+    expect(bridge.swipe).toHaveBeenCalledWith(0.1, 0.2, 0.8, 0.9, 320);
+  });
+
+  it('normalizes every trackpad readiness field without trusting truthy strings', () => {
+    const status = readInputBridgeStatus({ status: () => ({
+      available: true, trackpadSupported: true, trackpadEnabled: true,
+      trackpadConnected: 'yes', trackpadTargetActive: true
+    }) });
+    expect(status).toMatchObject({ available: true, trackpadSupported: true, trackpadEnabled: true, trackpadConnected: false, trackpadTargetActive: true });
   });
 });

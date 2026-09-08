@@ -57,7 +57,8 @@ export function deckFromAiAnswer(answer, request) {
   const types = new Set(proposal.data.widgets.map((widget) => widget.type));
   const permissions = ['external-display'];
   if (types.has('performance')) permissions.push('performance');
-  if (types.has('keyboard') || types.has('trackpad')) permissions.push('keyboard');
+  if (types.has('keyboard')) permissions.push('keyboard');
+  if (types.has('trackpad')) permissions.push('trackpad');
   const deck = {
     schemaVersion: 1,
     kind: 'deck',

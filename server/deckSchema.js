@@ -32,7 +32,7 @@ export const deckSchema = z.object({
       columns: z.number().int().min(1).max(4)
     }).strict()).max(6).default([])
   }).strict(),
-  permissions: z.array(z.enum(['network', 'keyboard', 'performance', 'external-display'])).max(4).default([]),
+  permissions: z.array(z.enum(['network', 'keyboard', 'trackpad', 'performance', 'external-display'])).max(5).default([]),
   sources: z.array(safeUrl).max(12).default([]),
   ai: z.object({ enabled: z.boolean(), purpose: z.string().trim().max(200).optional() }).strict().default({ enabled: false })
 }).strict().superRefine((deck, context) => {
@@ -43,7 +43,8 @@ export const deckSchema = z.object({
   };
   if (deck.kind === 'deck') requirePermission('external-display', 'A runnable Deck must declare external-display access.');
   if (widgetTypesInDeck.has('performance')) requirePermission('performance', 'Performance widgets must declare read-only performance access.');
-  if (widgetTypesInDeck.has('keyboard') || widgetTypesInDeck.has('trackpad')) requirePermission('keyboard', 'Keyboard and trackpad widgets must declare keyboard access.');
+  if (widgetTypesInDeck.has('keyboard')) requirePermission('keyboard', 'Keyboard widgets must declare keyboard access.');
+  if (widgetTypesInDeck.has('trackpad')) requirePermission('trackpad', 'Trackpad widgets must declare trackpad access.');
   const declaredSources = new Set(deck.sources);
   deck.layout.widgets.forEach((widget, index) => {
     if (!widget.sourceUrl) return;

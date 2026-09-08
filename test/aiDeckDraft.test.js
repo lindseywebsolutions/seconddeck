@@ -33,4 +33,9 @@ describe('AI Deck draft boundary', () => {
     expect(prompt).toContain('No markdown, code fences, explanation, URLs, sources, scripts, or executable code.');
     expect(prompt).toContain('"packageName":"com.example.rpg"');
   });
+
+  it('keeps generated trackpad approval separate from keyboard access', () => {
+    const trackpadProposal = { ...proposal, widgets: [{ type: 'trackpad', title: 'Touch surface' }] };
+    expect(deckFromAiAnswer(JSON.stringify(trackpadProposal), request).permissions).toEqual(['external-display', 'trackpad']);
+  });
 });
