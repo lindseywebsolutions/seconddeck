@@ -27,10 +27,10 @@ export function createApp({ config, authService, aiService, deckStore, mailer })
     catch { res.status(503).json({ status: 'not-ready', email: 'unavailable' }); }
   });
   app.get('/api/config', (_req, res) => res.json({
-    name: 'SecondDeck', version: process.env.APP_VERSION || '0.8.0', login: 'email-code', widgetTypes,
+    name: 'SecondDeck', version: process.env.APP_VERSION || '0.9.0', login: 'email-code', widgetTypes,
     deckSchemaVersion: 1, deckFileFormats: ['json', 'yaml'], maxDeckFileBytes: 65_536,
     catalog: { mode: 'git-release', repository: 'https://github.com/lindseywebsolutions/seconddeck', directory: 'catalog' },
-    downloadUrl: `${config.publicUrl}/downloads/seconddeck-v${process.env.APP_VERSION || '0.8.0'}.apk`,
+    downloadUrl: `${config.publicUrl}/downloads/seconddeck-v${process.env.APP_VERSION || '0.9.0'}.apk`,
     obtainiumSourceUrl: 'https://github.com/lindseywebsolutions/seconddeck'
   }));
 
@@ -88,6 +88,7 @@ export function createApp({ config, authService, aiService, deckStore, mailer })
   app.get('/.well-known/assetlinks.json', (_req, res) => {
     res.type('application/json').sendFile(path.join(root, 'public/.well-known/assetlinks.json'), { dotfiles: 'allow' });
   });
+  app.use('/catalog-assets', express.static(path.join(root, 'catalog'), { dotfiles: 'deny', immutable: false, maxAge: '1h' }));
   app.use('/downloads', express.static(path.join(root, 'public/downloads'), { immutable: false, maxAge: '5m' }));
   app.use(express.static(path.join(root, 'dist'), { maxAge: '1h' }));
   app.get('/{*path}', (_req, res) => res.sendFile(path.join(root, 'dist/index.html')));

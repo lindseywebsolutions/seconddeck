@@ -5,6 +5,8 @@ import { activeDeck, deckForPackage, deckFromLocation, installDeck, installedDec
 import { formatBytes, formatDuration, normalizePerformanceSnapshot, readTimerState, timerElapsed, toggleTimer } from './companionRuntime.js';
 import { hasDeckUpdate, installedRevision, localDeck, mergeCatalogWithInstalled, parsePortableDeck, portableDeck, serializeDeck } from './deckPortability.js';
 import { createDiagnosticReport, diagnosticChecks, diagnosticDeck, diagnosticProgress, normalizeDiagnosticDisplayState, readDiagnosticConfirmations, setDiagnosticConfirmation } from './deviceDiagnostics.js';
+import { localizedDeck, safePackageIcon } from './deckLocalization.js';
+import { obtainiumImportUrl } from './obtainium.js';
 
 const root = document.querySelector('#app');
 const state = { user: null, decks: [], installed: [], activeDeck: null, detectedDeck: null, yieldedPackage: null, previewDeck: null, display: null, diagnosticsDisplay: null, config: null, offline: false };
@@ -115,11 +117,12 @@ async function companion() {
     location.replace(`${location.pathname}#/login`);
     return;
   }
-  const deck = deckFromLocation(location);
-  if (!deck) {
+  const sourceDeck = deckFromLocation(location);
+  if (!sourceDeck) {
     root.innerHTML = `<main class="companion-locked">${icon('shield')}<h1>No active Deck</h1><p>Return to SecondDeck, sign in, install a reviewed Deck, and choose <strong>Use on second screen</strong>.</p></main>`;
     return;
   }
+  const deck = localizedDeck(sourceDeck);
   const responsive = [...(deck.layout.breakpoints || [])].sort((a, b) => b.minWidth - a.minWidth).find((item) => window.innerWidth >= item.minWidth);
   const columns = Math.max(1, Math.min(4, Number(responsive?.columns || deck.layout.columns) || 1));
   root.innerHTML = `<main class="companion-shell">
@@ -135,8 +138,8 @@ function home() {
     <section class="hero"><div class="eyebrow"><span></span> Built first for AYN Thor</div>
       <h1>Your game up top.<br><em>Everything else below.</em></h1>
       <p class="lede">SecondDeck turns the screen you are not playing on into a living companion—maps, guides, notes, persistent timers, read-only device telemetry, and community-built Decks that stay out of your way.</p>
-      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="obtainium://app/%7B%22id%22%3A%22com.lindseywebsolutions.seconddeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLindseyWebSolutions%2Fseconddeck%22%2C%22author%22%3A%22Lindsey%20Web%20Solutions%22%2C%22name%22%3A%22SecondDeck%22%7D">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.8.0.apk'}">Download APK</a></div>
-      <p class="obtainium">On your Thor? Use <strong>Add to Obtainium</strong> so the source is saved as SecondDeck, or install the signed APK directly.</p>
+      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="${obtainiumImportUrl()}">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.9.0.apk'}">Download APK</a></div>
+      <p class="obtainium">On your Thor? Use <strong>Add to Obtainium</strong> so the source is saved as SecondDeck. Obtainium shows the embedded dual-screen logo after the first install.</p>
       <div class="device"><div class="screen screen-top"><div class="game-art"><span>NOW PLAYING</span><strong>YOUR GAME</strong></div></div><div class="hinge"></div><div class="screen screen-bottom"><div class="deck-preview"><div class="mini-card teal">ROUTE<small>North ridge → tower</small></div><div class="mini-card amber">TIMER<small>01:42:18</small></div><div class="mini-card wide">SESSION NOTES<small>Key found · East gate unlocked</small></div></div></div></div>
     </section>
     <section id="features" class="feature-section"><div><span class="section-num">01 / RUNTIME</span><h2>Useful when you need it.<br>Invisible when you don't.</h2></div><div class="feature-grid">
@@ -181,13 +184,16 @@ async function verifyCode(event) {
 }
 
 function deckCard(deck) {
-  const widgetNames = deck.layout.widgets.slice(0, 4).map((widget) => `<span>${escapeHtml(widget.type)}</span>`).join('');
+  const view = localizedDeck(deck);
+  const widgetNames = view.layout.widgets.slice(0, 4).map((widget) => `<span>${escapeHtml(widget.type)}</span>`).join('');
+  const packageIcon = safePackageIcon(deck);
   const localRevision = installedRevision(deck, state.installed);
   const installed = Boolean(localRevision);
   const updateAvailable = hasDeckUpdate(deck, state.installed);
   const active = installedRevision(deck, state.activeDeck ? [state.activeDeck] : []) !== null;
   const canReview = state.user?.aiProvider === 'codex';
   const catalogUrl = catalogSourceUrl(deck);
+  const locale = view.activeLocale ? ` · ${escapeHtml(view.activeLocale)}` : '';
   const action = deck.status === 'review'
     ? canReview
       ? `<span class="review-actions"><button class="text-button" data-action="review" data-review-status="rejected" data-deck-id="${escapeHtml(deck.id)}">Reject</button><button class="text-button" data-action="review" data-review-status="published" data-deck-id="${escapeHtml(deck.id)}">Publish</button></span>`
@@ -203,7 +209,7 @@ function deckCard(deck) {
       : installed
         ? `<button class="text-button" data-action="activate" data-deck-id="${escapeHtml(deck.id)}">Use on second screen →</button>`
         : `<button class="text-button" data-action="install" data-deck-id="${escapeHtml(deck.id)}">Install locally ↓</button>`;
-  return `<article class="deck-card" data-deck-search="${escapeHtml([deck.name, deck.description, deck.publisher, ...(deck.target?.packageNames || [])].join(' ').toLowerCase())}"><div class="deck-art"><div>${widgetNames}</div></div><div class="deck-copy"><small>${escapeHtml(deck.target.platforms.join(' · '))} · v${escapeHtml(deck.version || 1)}${deck.publisher ? ` · ${escapeHtml(deck.publisher)}` : ''}</small><h3>${escapeHtml(deck.name)}</h3><p>${escapeHtml(deck.description)}</p><div><span class="status ${escapeHtml(updateAvailable ? 'update' : deck.status)}">${updateAvailable ? 'update available' : active ? 'active' : installed ? 'installed' : escapeHtml(deck.status)}</span><button class="text-button" data-action="preview" data-deck-id="${escapeHtml(deck.id)}">Preview</button>${catalogUrl ? `<a class="text-button" href="${escapeHtml(catalogUrl)}" target="_blank" rel="noopener noreferrer">GitHub source ↗</a>` : ''}</div><div class="deck-action">${action}</div></div></article>`;
+  return `<article class="deck-card" data-deck-search="${escapeHtml([view.name, view.description, deck.publisher, ...(deck.target?.packageNames || [])].join(' ').toLowerCase())}"><div class="deck-art ${packageIcon ? 'has-package-icon' : ''}">${packageIcon ? `<img src="${packageIcon}" alt="" loading="lazy">` : ''}<div>${widgetNames}</div></div><div class="deck-copy"><small>${escapeHtml(view.target.platforms.join(' · '))} · v${escapeHtml(deck.version || 1)}${deck.publisher ? ` · ${escapeHtml(deck.publisher)}` : ''}${locale}</small><h3>${escapeHtml(view.name)}</h3><p>${escapeHtml(view.description)}</p><div><span class="status ${escapeHtml(updateAvailable ? 'update' : deck.status)}">${updateAvailable ? 'update available' : active ? 'active' : installed ? 'installed' : escapeHtml(deck.status)}</span><button class="text-button" data-action="preview" data-deck-id="${escapeHtml(deck.id)}">Preview</button>${catalogUrl ? `<a class="text-button" href="${escapeHtml(catalogUrl)}" target="_blank" rel="noopener noreferrer">GitHub source ↗</a>` : ''}</div><div class="deck-action">${action}</div></div></article>`;
 }
 
 async function appPage() {
@@ -268,7 +274,9 @@ function previewDeck(deck) {
   dialog.id = 'deck-preview-dialog';
   dialog.className = 'deck-dialog';
   const installed = installedRevision(deck, state.installed);
-  dialog.innerHTML = `<button class="dialog-close" data-action="close-preview" aria-label="Close preview">×</button><span class="section-num">DECLARATIVE PREVIEW · v${escapeHtml(deck.version || 1)}</span><h2>${escapeHtml(deck.name)}</h2><p>${escapeHtml(deck.description)}</p><div class="preview-widgets">${deck.layout.widgets.map((widget) => `<article><small>${escapeHtml(widget.type)}</small><strong>${escapeHtml(widget.title)}</strong>${widget.content ? `<p>${escapeHtml(widget.content).replace(/\n/g, '<br>')}</p>` : ''}</article>`).join('')}</div><footer><span>${escapeHtml(deck.target.packageNames.join(' · '))}</span><span>${deck.layout.breakpoints?.[0]?.columns || deck.layout.columns} wide-screen column${(deck.layout.breakpoints?.[0]?.columns || deck.layout.columns) === 1 ? '' : 's'}</span><span class="dialog-actions"><button class="text-button" data-action="export-deck" data-deck-id="${escapeHtml(deck.id)}">Export JSON ↓</button>${deck.status === 'local' && !installed ? `<button class="text-button" data-action="install-preview" data-deck-id="${escapeHtml(deck.id)}">Install locally ↓</button>` : ''}${installed ? `<button class="text-button danger" data-action="uninstall" data-deck-id="${escapeHtml(installed.id)}">Remove local copy</button>` : ''}</span></footer>`;
+  const view = localizedDeck(deck);
+  const readmeUrl = safeSourceUrl(deck.package?.readmeUrl);
+  dialog.innerHTML = `<button class="dialog-close" data-action="close-preview" aria-label="Close preview">×</button><span class="section-num">DECLARATIVE PREVIEW · v${escapeHtml(deck.version || 1)}${view.activeLocale ? ` · ${escapeHtml(view.activeLocale)}` : ''}</span><h2>${escapeHtml(view.name)}</h2><p>${escapeHtml(view.description)}</p>${deck.package ? `<p class="package-meta">${escapeHtml(deck.package.license)} license · ${escapeHtml((deck.package.availableLocales || [deck.package.defaultLocale]).join(', '))}${readmeUrl ? ` · <a href="${escapeHtml(readmeUrl)}" target="_blank" rel="noopener noreferrer">Package README ↗</a>` : ''}</p>` : ''}<div class="preview-widgets">${view.layout.widgets.map((widget) => `<article><small>${escapeHtml(widget.type)}</small><strong>${escapeHtml(widget.title)}</strong>${widget.content ? `<p>${escapeHtml(widget.content).replace(/\n/g, '<br>')}</p>` : ''}</article>`).join('')}</div><footer><span>${escapeHtml(view.target.packageNames.join(' · '))}</span><span>${view.layout.breakpoints?.[0]?.columns || view.layout.columns} wide-screen column${(view.layout.breakpoints?.[0]?.columns || view.layout.columns) === 1 ? '' : 's'}</span><span class="dialog-actions"><button class="text-button" data-action="export-deck" data-deck-id="${escapeHtml(deck.id)}">Export JSON ↓</button>${deck.status === 'local' && !installed ? `<button class="text-button" data-action="install-preview" data-deck-id="${escapeHtml(deck.id)}">Install locally ↓</button>` : ''}${installed ? `<button class="text-button danger" data-action="uninstall" data-deck-id="${escapeHtml(installed.id)}">Remove local copy</button>` : ''}</span></footer>`;
   document.body.append(dialog);
   dialog.showModal();
 }

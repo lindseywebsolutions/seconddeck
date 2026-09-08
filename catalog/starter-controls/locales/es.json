@@ -1,0 +1,10 @@
+{
+  "name": "Deck de controles inicial",
+  "description": "Un diseño sencillo con cronómetro, lista, notas y controles de referencia rápida.",
+  "widgets": {
+    "session-checklist": { "title": "Lista de sesión", "content": "Guarda la partida\nRevisa la batería\nSincroniza el progreso" },
+    "run-timer": { "title": "Cronómetro" },
+    "quick-notes": { "title": "Notas rápidas" },
+    "controls": { "title": "Atajos", "content": "Captura de pantalla\nBrillo\nVolumen" }
+  }
+}

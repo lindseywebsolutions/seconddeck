@@ -11,8 +11,11 @@ Decks are data packages and cannot ship executable native plugins.
 ## Install on an AYN Thor
 
 1. Open `https://seconddeck.lws-workspace.com` and tap **Add to Obtainium**.
-   The full-config deep link preserves the `SecondDeck` name and tracks signed
-   releases from `https://github.com/LindseyWebSolutions/seconddeck`.
+   The full-config deep link forces the pre-install source name to `SecondDeck`
+   and tracks signed releases from
+   `https://github.com/LindseyWebSolutions/seconddeck`. Obtainium reads the
+   embedded dual-screen launcher logo after the first install; it does not
+   support custom icons for uninstalled source-only entries.
 2. Or open that URL on the Thor and choose **Download APK**.
 3. Install the APK, launch SecondDeck, and sign in with the one-time code sent
    to your email.
@@ -48,9 +51,10 @@ signing keystore.
 
 ## Status
 
-Version 0.8.0 includes the public homepage, authenticated GitHub-backed community library,
+Version 0.9.0 includes the public homepage, authenticated GitHub-backed community library,
 Thor-friendly creator and corporate review queue, strict schema validation,
-local Deck installation/selection, a manifest-driven offline companion runtime,
+localized catalog packages with validated icons and README provenance, local
+Deck installation/selection, a manifest-driven offline companion runtime,
 text maps, persistent timers, read-only device telemetry, explicit companion
 stop controls, versioned reviewed updates, strict JSON/YAML portability,
 on-device draft preview/install, validated AI-assisted Deck generation and AI

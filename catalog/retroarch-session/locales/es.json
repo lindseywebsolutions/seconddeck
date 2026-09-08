@@ -1,0 +1,11 @@
+{
+  "name": "Deck de sesión RetroArch",
+  "description": "Un compañero local para rutas, objetivos, notas, tiempo y estado del dispositivo.",
+  "widgets": {
+    "route-guide": { "title": "Guía de ruta", "content": "Añade aquí la siguiente ruta u objetivo." },
+    "session-goals": { "title": "Objetivos de sesión", "content": "Define un objetivo\nGuarda el progreso\nAnota el siguiente paso" },
+    "session-notes": { "title": "Notas de sesión" },
+    "run-timer": { "title": "Cronómetro" },
+    "device-health": { "title": "Estado del dispositivo" }
+  }
+}

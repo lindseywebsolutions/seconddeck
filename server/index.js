@@ -13,7 +13,10 @@ const mailer = createMailer(config.smtp);
 const authService = createAuthService({ secret: config.sessionSecret, sendCode: mailer.sendCode });
 const aiService = createAiService(config);
 const catalogPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../catalog');
-const catalog = await loadDeckCatalog(catalogPath, { ref: `v${process.env.APP_VERSION || '0.8.0'}` });
+const catalog = await loadDeckCatalog(catalogPath, {
+  ref: `v${process.env.APP_VERSION || '0.9.0'}`,
+  assetBaseUrl: `${config.publicUrl}/catalog-assets`
+});
 const app = createApp({ config, authService, aiService, deckStore: createDeckStore(config.dataPath, { catalog }), mailer });
 
 app.listen(config.port, '0.0.0.0', () => {

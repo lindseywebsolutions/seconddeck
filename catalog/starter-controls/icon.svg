@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Starter Control Deck">
+  <rect width="256" height="256" rx="58" fill="#081012"/>
+  <rect x="37" y="38" width="182" height="70" rx="19" fill="#142326" stroke="#78e4c4" stroke-width="8"/>
+  <rect x="28" y="121" width="200" height="10" rx="5" fill="#53666a"/>
+  <rect x="37" y="144" width="182" height="74" rx="19" fill="#f5bc62"/>
+  <path d="M72 181h42M93 160v42" stroke="#081012" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="165" cy="171" r="10" fill="#081012"/>
+  <circle cx="188" cy="194" r="10" fill="#081012"/>
+  <path d="M77 72h102" stroke="#78e4c4" stroke-width="10" stroke-linecap="round"/>
+</svg>

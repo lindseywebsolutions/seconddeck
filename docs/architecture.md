@@ -27,6 +27,11 @@
   stable channel IDs, so repository updates replace matching installed
   revisions without duplicates. Publishing a server-reviewed update supersedes
   its prior public revision without hiding that prior revision during review.
+- Optional Git catalog package metadata adds bounded, validated visual assets,
+  README provenance, and locale overlays. Icons are embedded into installed
+  catalog records for offline library rendering; larger reviewed assets are
+  served from a read-only catalog route. Locale overlays can replace copy only,
+  never targets, capabilities, layout, or executable behavior.
 - Reviewed Decks are installed into device-local storage. The selected Deck is
   passed to the secondary display as data and renders offline; notes and
   checklist state and timer state stay on the device. A narrowly scoped native

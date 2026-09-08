@@ -53,6 +53,22 @@ The library accepts strict JSON and YAML files up to 64 KiB and exports a
 canonical JSON manifest without author email, review state, timestamps, or
 other server metadata. YAML aliases and duplicate keys are rejected.
 
+## Git catalog packages
+
+A reviewed Git catalog directory may add a strict `metadata.json`, a bounded
+PNG, WebP, JPEG, or self-contained SVG icon, an optional Markdown README, up to
+four raster screenshots, and `locales/<locale>.json` files. Package paths cannot
+escape their Deck directory. Images are checked by file signature, SVG rejects
+scripts, event handlers, embedded documents, external references, and CSS URLs,
+and every file has an explicit size limit.
+
+The base manifest is the default locale. Locale files may translate only the
+Deck name, description, and the title/content of widget IDs already present in
+that manifest. They cannot change targets, permissions, sources, layout, or AI
+settings. The runtime selects an exact or language-compatible device locale and
+keeps the validated base manifest as fallback. Package metadata is catalog-only
+and is stripped from portable JSON exports.
+
 The first submission creates a stable update channel. Later versions are stored
 as immutable review records. The currently published revision remains visible
 until a reviewer publishes the update; publishing it supersedes the prior

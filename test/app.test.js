@@ -41,6 +41,11 @@ describe('SecondDeck API', () => {
     expect(response.body[0].target.package_name).toBe('com.lindseywebsolutions.seconddeck');
   });
 
+  it('serves reviewed catalog package assets with their image type', async () => {
+    const response = await request(app).get('/catalog-assets/retroarch-session/icon.svg').expect('content-type', /image\/svg\+xml/).expect(200);
+    expect(Buffer.from(response.body).toString('utf8')).toContain('RetroArch Session Deck');
+  });
+
   it('advertises the portable Deck contract', async () => {
     const response = await request(app).get('/api/config').expect(200);
     expect(response.body).toMatchObject({ deckSchemaVersion: 1, deckFileFormats: ['json', 'yaml'], maxDeckFileBytes: 65_536, catalog: { mode: 'git-release', directory: 'catalog' }, obtainiumSourceUrl: 'https://github.com/lindseywebsolutions/seconddeck' });

@@ -16,3 +16,9 @@ To contribute from a Thor:
 Catalog files cannot contain executable code. JSON and YAML manifests are
 accepted, capped at 64 KiB, and must pass the same strict schema used for local
 imports and server submissions.
+
+An optional `metadata.json` may declare an SPDX-style license, homepage, icon,
+Markdown README, up to four raster screenshots, and the base locale. Translated
+copy lives in `locales/<locale>.json`; it may address only widget IDs from the
+manifest. Package paths are confined to the Deck directory, assets are bounded
+and type-checked, and unsafe SVG constructs are rejected before startup.
