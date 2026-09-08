@@ -15,7 +15,9 @@ Decks are data packages and cannot ship executable native plugins.
    and tracks signed releases from
    `https://github.com/LindseyWebSolutions/seconddeck`. Obtainium reads the
    embedded dual-screen launcher logo after the first install; it does not
-   support custom icons for uninstalled source-only entries.
+   support custom icons for uninstalled source-only entries. If an older entry
+   is still named `App`, remove that stale source and add it again from the
+   homepage; importing the same URL does not replace an existing tracked entry.
 2. Or open that URL on the Thor and choose **Download APK**.
 3. Install the APK, launch SecondDeck, and sign in with the one-time code sent
    to your email.
