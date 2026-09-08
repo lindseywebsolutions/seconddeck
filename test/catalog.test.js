@@ -19,6 +19,7 @@ describe('Git-backed Deck catalog', () => {
     expect(catalog[0].catalog).toMatchObject({ repository: 'https://github.com/lindseywebsolutions/seconddeck', ref: 'v-test', path: 'catalog/retroarch-session/deck.yaml' });
     expect(catalog[0].package).toMatchObject({ license: 'MIT', defaultLocale: 'en', availableLocales: ['en', 'es'], icon: { path: 'catalog/retroarch-session/icon.svg', url: 'https://seconddeck.test/catalog-assets/retroarch-session/icon.svg' } });
     expect(catalog[0].package.icon.dataUrl).toMatch(/^data:image\/svg\+xml;base64,/);
+    expect(catalog[0].package.screenshots).toEqual([{ path: 'catalog/retroarch-session/screenshots/companion.png', url: 'https://seconddeck.test/catalog-assets/retroarch-session/screenshots/companion.png' }]);
     expect(catalog[0].localizations.es.widgets['route-guide'].title).toBe('Guía de ruta');
   });
 

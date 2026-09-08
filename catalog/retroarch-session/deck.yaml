@@ -27,7 +27,10 @@ layout:
     - id: session-goals
       type: checklist
       title: Session goals
-      content: Set a goal\nSave progress\nRecord the next step
+      content: |-
+        Set a goal
+        Save progress
+        Record the next step
     - id: session-notes
       type: notes
       title: Session notes

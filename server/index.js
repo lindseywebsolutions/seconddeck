@@ -14,7 +14,7 @@ const authService = createAuthService({ secret: config.sessionSecret, sendCode: 
 const aiService = createAiService(config);
 const catalogPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../catalog');
 const catalog = await loadDeckCatalog(catalogPath, {
-  ref: `v${process.env.APP_VERSION || '0.11.0'}`,
+  ref: `v${process.env.APP_VERSION || '0.12.0'}`,
   assetBaseUrl: `${config.publicUrl}/catalog-assets`
 });
 const app = createApp({ config, authService, aiService, deckStore: createDeckStore(config.dataPath, { catalog }), mailer });

@@ -76,6 +76,11 @@ escape their Deck directory. Images are checked by file signature, SVG rejects
 scripts, event handlers, embedded documents, external references, and CSS URLs,
 and every file has an explicit size limit.
 
+Catalog cards use the first validated screenshot as runtime art, and the Deck
+preview exposes the validated screenshot set as a responsive gallery. If those
+remote catalog assets are unavailable, the preview fails visibly closed while
+the installed manifest and all local widget state continue to work offline.
+
 The base manifest is the default locale. Locale files may translate only the
 Deck name, description, and the title/content of widget IDs already present in
 that manifest. They cannot change targets, permissions, sources, layout, or AI

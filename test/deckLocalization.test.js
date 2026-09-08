@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { localizedDeck, safePackageIcon, selectDeckLocale } from '../src/deckLocalization.js';
+import { localizedDeck, safePackageIcon, safePackageScreenshots, selectDeckLocale } from '../src/deckLocalization.js';
 
 const deck = {
   name: 'Route Notes', description: 'A route companion for long sessions.',
@@ -28,5 +28,26 @@ describe('Deck package localization', () => {
     expect(safePackageIcon({ package: { icon: { dataUrl: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=' } } })).toContain('image/svg+xml');
     expect(safePackageIcon({ package: { icon: { dataUrl: 'javascript:alert(1)' } } })).toBeNull();
     expect(safePackageIcon({ package: { icon: { dataUrl: `data:image/png;base64,${'A'.repeat(100001)}` } } })).toBeNull();
+  });
+
+  it('allows only four unique credential-free HTTPS catalog screenshots', () => {
+    expect(safePackageScreenshots({ package: { screenshots: [
+      { url: 'https://seconddeck.test/one.png' },
+      { url: 'http://seconddeck.test/two.png' },
+      { url: 'https://user:secret@seconddeck.test/three.png' },
+      { url: 'javascript:alert(1)' },
+      { url: 'https://seconddeck.test/one.png' },
+      { url: 'https://seconddeck.test/four.png' },
+      { url: 'https://seconddeck.test/five.png' },
+      { url: 'https://seconddeck.test/six.png' },
+      { url: 'https://seconddeck.test/seven.png' }
+    ] } })).toEqual([
+      'https://seconddeck.test/one.png',
+      'https://seconddeck.test/four.png',
+      'https://seconddeck.test/five.png',
+      'https://seconddeck.test/six.png'
+    ]);
+    expect(safePackageScreenshots({ package: { screenshots: [{ url: 'http://127.0.0.1:4080/catalog-assets/preview.png' }] } })).toEqual(['http://127.0.0.1:4080/catalog-assets/preview.png']);
+    expect(safePackageScreenshots({ package: { screenshots: null } })).toEqual([]);
   });
 });

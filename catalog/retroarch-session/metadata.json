@@ -3,7 +3,7 @@
   "license": "MIT",
   "homepage": "https://github.com/lindseywebsolutions/seconddeck",
   "icon": "icon.svg",
-  "screenshots": [],
+  "screenshots": ["screenshots/companion.png"],
   "readme": "README.md",
   "defaultLocale": "en"
 }

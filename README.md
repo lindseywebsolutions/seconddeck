@@ -51,7 +51,7 @@ signing keystore.
 
 ## Status
 
-Version 0.11.0 includes the public homepage, authenticated GitHub-backed community library,
+Version 0.12.0 includes the public homepage, authenticated GitHub-backed community library,
 Thor-friendly creator and corporate review queue, strict schema validation,
 localized catalog packages with validated icons and README provenance, local
 Deck installation/selection, a manifest-driven offline companion runtime,
@@ -64,7 +64,9 @@ secondary-display presentation, Vault-backed ChatGPT authentication for the
 corporate Codex lane, an on-device physical acceptance workflow, Kubernetes
 manifests, Obtainium-compatible APK hosting, and device-local capability
 approval that is rechecked for every Deck revision and can be revoked without
-removing the Deck. Keyboard widgets now connect through a user-enabled Android
+removing the Deck. Reviewed package screenshots now appear as real runtime art
+on catalog cards and in a responsive preview gallery, with a clear offline
+fallback while installed Decks remain fully local. Keyboard widgets connect through a user-enabled Android
 input method to the focused upper-app text field, with bounded text and a fixed
 key allowlist. Global trackpad injection remains deliberately unavailable
 because Android reserves the relevant API for system-role applications.
