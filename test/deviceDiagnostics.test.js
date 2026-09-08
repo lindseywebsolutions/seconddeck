@@ -30,14 +30,14 @@ describe('physical device diagnostics', () => {
   it('exports a bounded report without an email or foreground package name', () => {
     const confirmations = Object.fromEntries(diagnosticChecks.map(({ id }) => [id, true]));
     const report = createDiagnosticReport({
-      appVersion: '0.9.0', confirmations, now: 1_787_616_000_000,
+      appVersion: '0.10.0', confirmations, now: 1_787_616_000_000,
       displayState: {
         native: true, isExtended: true, companionVisible: true, usageAccessGranted: true,
         foregroundPackage: 'com.private.game', email: 'player@example.com',
         displays: [{ name: 'Private device name', state: 2, widthPixels: 1920, heightPixels: 1080, refreshRateHz: 120, rotation: 1 }]
       }
     });
-    expect(report).toMatchObject({ product: 'SecondDeck', appVersion: '0.9.0', complete: true, runtime: { secondaryDisplayAvailable: true, foregroundAppDetected: true, secondaryDisplayCount: 1 } });
+    expect(report).toMatchObject({ product: 'SecondDeck', appVersion: '0.10.0', complete: true, runtime: { secondaryDisplayAvailable: true, foregroundAppDetected: true, secondaryDisplayCount: 1 } });
     expect(JSON.stringify(report)).not.toContain('com.private.game');
     expect(JSON.stringify(report)).not.toContain('player@example.com');
     expect(JSON.stringify(report)).not.toContain('Private device name');

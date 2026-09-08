@@ -39,6 +39,11 @@
   to performance widgets; navigation away from the bundled companion page is
   blocked and HTTP(S) sources open externally. A cached verified profile permits
   this installed library to remain available through a network interruption.
+- Installation and every update require an explicit device-local review of all
+  requested capabilities, exact app targets, and reviewed public sources.
+  Grants are bound to a stable Deck channel and exact revision, are never
+  uploaded, and fail closed if storage is missing or altered. Revoking a grant
+  also clears that Deck as the active companion.
 - The Android packaging step removes website-hosted APK artifacts from the
   WebView bundle before Capacitor sync, preventing older releases from being
   recursively embedded in each new APK.

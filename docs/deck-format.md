@@ -45,6 +45,11 @@ widget with `sourceUrl` declares `network`. Each widget source must also appear
 in the top-level `sources` allowlist. Only HTTP(S) sources pass validation.
 
 These declarations are enforced by the server. They are not advisory metadata.
+The Android/web runtime also requires the player to approve every declared
+capability during installation and again for each update. That approval is
+stored only on the device, bound to the Deck channel and exact version, and can
+be revoked independently of the installed manifest. Missing, stale, or altered
+grants prevent activation and automatic game matching.
 
 ## Portable files and reviewed updates
 

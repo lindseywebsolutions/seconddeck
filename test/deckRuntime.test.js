@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeDeck, decodeDeck, deckForPackage, deckFromLocation, encodeDeck, installDeck, installedDecks, setActiveDeck, setPackageYield, shouldYieldForPackage, uninstallDeck, yieldedPackages } from '../src/deckRuntime.js';
+import { activeDeck, deckPermissionsGranted, decodeDeck, deckForPackage, deckFromLocation, encodeDeck, grantDeckPermissions, installDeck, installedDecks, requiredDeckPermissions, revokeDeckPermissions, setActiveDeck, setPackageYield, shouldYieldForPackage, uninstallDeck, yieldedPackages } from '../src/deckRuntime.js';
 
 function memoryStorage() {
   const values = new Map();
@@ -65,5 +65,37 @@ describe('local Deck runtime', () => {
     expect(() => setPackageYield('not a package', true, storage)).toThrow('valid Android package');
     expect(() => setPackageYield('single', true, storage)).toThrow('valid Android package');
     expect(yieldedPackages(storage)).toEqual([]);
+  });
+
+  it('requires exact, versioned device-local permission approval', () => {
+    const storage = memoryStorage();
+    const permissionDeck = { ...first, permissions: ['performance', 'external-display'] };
+    expect(requiredDeckPermissions(permissionDeck)).toEqual(['external-display', 'performance']);
+    expect(() => installDeck(permissionDeck, storage)).toThrow('Review this Deck');
+    expect(() => installDeck(permissionDeck, storage, ['external-display'])).toThrow('Approve every');
+
+    installDeck(permissionDeck, storage, ['performance', 'external-display']);
+    expect(deckPermissionsGranted(permissionDeck, storage)).toBe(true);
+    expect(activeDeck(storage)?.id).toBe(permissionDeck.id);
+    expect(deckPermissionsGranted({ ...permissionDeck, sources: ['https://unexpected.example'] }, storage)).toBe(false);
+
+    const update = { ...permissionDeck, id: 'deck-one-v2', version: 2 };
+    expect(deckPermissionsGranted(update, storage)).toBe(false);
+    expect(() => setActiveDeck(update.id, storage)).toThrow('Install this Deck');
+    installDeck(update, storage, ['external-display', 'performance']);
+    expect(deckPermissionsGranted(update, storage)).toBe(true);
+
+    revokeDeckPermissions(update.channelId, storage);
+    expect(deckPermissionsGranted(update, storage)).toBe(false);
+    expect(activeDeck(storage)).toBeNull();
+    expect(() => setActiveDeck(update.id, storage)).toThrow('Review this Deck');
+  });
+
+  it('rejects unknown permissions even if local storage was tampered with', () => {
+    const storage = memoryStorage();
+    const tampered = { ...first, permissions: ['external-display', 'shell'] };
+    expect(deckPermissionsGranted(tampered, storage)).toBe(false);
+    expect(() => grantDeckPermissions(tampered, ['external-display', 'shell'], storage)).toThrow('Approve every');
+    expect(() => installDeck(tampered, storage, ['external-display', 'shell'])).toThrow('unknown permission');
   });
 });

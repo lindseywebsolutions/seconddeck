@@ -1,7 +1,9 @@
 const installedKey = 'seconddeck_installed_decks_v1';
 const activeKey = 'seconddeck_active_deck_v1';
 const yieldedPackagesKey = 'seconddeck_yielded_packages_v1';
+const grantsKey = 'seconddeck_deck_grants_v1';
 const androidPackagePattern = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/i;
+export const deckPermissionTypes = ['external-display', 'network', 'performance', 'keyboard'];
 
 function parse(value, fallback) {
   try { return value ? JSON.parse(value) : fallback; }
@@ -18,20 +20,95 @@ function identity(deck) {
   return String(deck?.channelId || deck?.id || '');
 }
 
+function normalizedDeckPermissions(deck) {
+  if (!Array.isArray(deck?.permissions)) return [];
+  const requested = [...new Set(deck.permissions.map((permission) => String(permission)))];
+  if (requested.some((permission) => !deckPermissionTypes.includes(permission))) return null;
+  return deckPermissionTypes.filter((permission) => requested.includes(permission));
+}
+
+function grantMap(storage) {
+  const value = parse(store(storage).getItem(grantsKey), {});
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function samePermissions(left, right) {
+  return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((permission, index) => permission === right[index]);
+}
+
+function consentContract(deck, permissions) {
+  return JSON.stringify({
+    version: Number(deck?.version || 1),
+    permissions,
+    packageNames: (deck?.target?.packageNames || []).map((name) => String(name).toLowerCase()),
+    sources: (deck?.sources || []).map(String),
+    widgets: (deck?.layout?.widgets || []).map((widget) => ({ type: String(widget?.type || ''), sourceUrl: widget?.sourceUrl ? String(widget.sourceUrl) : null })),
+    ai: deck?.ai?.enabled === true
+  });
+}
+
+export function requiredDeckPermissions(deck) {
+  return normalizedDeckPermissions(deck) || [];
+}
+
+export function deckPermissionsGranted(deck, storage) {
+  const required = normalizedDeckPermissions(deck);
+  if (!required) return false;
+  if (!required.length) return true;
+  const grant = grantMap(storage)[identity(deck)];
+  return Boolean(grant
+    && Number(grant.version) === Number(deck.version || 1)
+    && samePermissions(grant.permissions, required)
+    && grant.contract === consentContract(deck, required));
+}
+
+export function grantDeckPermissions(deck, approvedPermissions, storage) {
+  const required = normalizedDeckPermissions(deck);
+  const approved = normalizedDeckPermissions({ permissions: approvedPermissions });
+  if (!identity(deck) || !required || !approved || !samePermissions(required, approved)) {
+    throw new Error('Approve every requested Deck permission before installation.');
+  }
+  if (!required.length) return [];
+  const target = store(storage);
+  const grants = grantMap(target);
+  grants[identity(deck)] = { version: Number(deck.version || 1), permissions: required, contract: consentContract(deck, required) };
+  target.setItem(grantsKey, JSON.stringify(grants));
+  return required;
+}
+
+export function revokeDeckPermissions(id, storage) {
+  const target = store(storage);
+  const grants = grantMap(target);
+  delete grants[String(id || '')];
+  if (Object.keys(grants).length) target.setItem(grantsKey, JSON.stringify(grants));
+  else target.removeItem(grantsKey);
+  if (target.getItem(activeKey) === String(id || '')) target.removeItem(activeKey);
+  return grants;
+}
+
 export function installedDecks(storage) {
   const value = parse(store(storage).getItem(installedKey), []);
   return Array.isArray(value) ? value.filter((deck) => deck && typeof deck.id === 'string') : [];
 }
 
-export function installDeck(deck, storage) {
+export function installDeck(deck, storage, approvedPermissions) {
   if (!deck || typeof deck.id !== 'string' || !deck.layout?.widgets?.length) throw new Error('This Deck cannot be installed.');
   const target = store(storage);
   const deckId = identity(deck);
   const current = installedDecks(target).find((item) => identity(item) === deckId);
   if (current && Number(deck.version || 1) < Number(current.version || 1)) throw new Error('A newer revision of this Deck is already installed.');
+  const required = normalizedDeckPermissions(deck);
+  if (!required) throw new Error('This Deck requests an unknown permission.');
+  if (required.length && approvedPermissions === undefined) throw new Error('Review this Deck\'s permissions before installation.');
+  if (approvedPermissions !== undefined) {
+    const approved = normalizedDeckPermissions({ permissions: approvedPermissions });
+    if (!approved || !samePermissions(required, approved)) throw new Error('Approve every requested Deck permission before installation.');
+  }
   const decks = installedDecks(target).filter((item) => identity(item) !== deckId);
   decks.push(deck);
   target.setItem(installedKey, JSON.stringify(decks));
+  if (required.length) grantDeckPermissions(deck, approvedPermissions, target);
+  else revokeDeckPermissions(deckId, target);
   if (!target.getItem(activeKey) || target.getItem(activeKey) === current?.id) target.setItem(activeKey, deckId);
   return decks;
 }
@@ -46,6 +123,7 @@ export function uninstallDeck(id, storage) {
     if (decks[0]) target.setItem(activeKey, identity(decks[0]));
     else target.removeItem(activeKey);
   }
+  if (removed) revokeDeckPermissions(identity(removed), target);
   return decks;
 }
 
@@ -53,6 +131,7 @@ export function setActiveDeck(id, storage) {
   const target = store(storage);
   const deck = installedDecks(target).find((item) => item.id === id || identity(item) === id);
   if (!deck) throw new Error('Install this Deck before making it active.');
+  if (!deckPermissionsGranted(deck, target)) throw new Error('Review this Deck\'s permissions before launching it.');
   target.setItem(activeKey, identity(deck));
   return deck;
 }
@@ -60,7 +139,8 @@ export function setActiveDeck(id, storage) {
 export function activeDeck(storage) {
   const target = store(storage);
   const id = target.getItem(activeKey);
-  return installedDecks(target).find((deck) => deck.id === id || identity(deck) === id) || null;
+  const deck = installedDecks(target).find((item) => item.id === id || identity(item) === id) || null;
+  return deck && deckPermissionsGranted(deck, target) ? deck : null;
 }
 
 export function deckForPackage(packageName, decks) {
@@ -122,4 +202,4 @@ export function deckFromLocation(locationLike) {
   return match ? decodeDeck(match[1]) : null;
 }
 
-export const deckStorageKeys = { installedKey, activeKey, yieldedPackagesKey };
+export const deckStorageKeys = { installedKey, activeKey, yieldedPackagesKey, grantsKey };

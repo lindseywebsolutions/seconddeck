@@ -1,7 +1,7 @@
 import './styles.css';
 import { api, clearToken, getCachedProfile, getToken, setCachedProfile, setToken } from './auth.js';
 import { closeCompanionDisplay, getDisplayState, openCompanionDisplay, requestGameDetectionAccess } from './native.js';
-import { activeDeck, deckForPackage, deckFromLocation, installDeck, installedDecks, setActiveDeck, setPackageYield, shouldYieldForPackage, uninstallDeck } from './deckRuntime.js';
+import { activeDeck, deckForPackage, deckFromLocation, deckPermissionsGranted, grantDeckPermissions, installDeck, installedDecks, requiredDeckPermissions, revokeDeckPermissions, setActiveDeck, setPackageYield, shouldYieldForPackage, uninstallDeck } from './deckRuntime.js';
 import { formatBytes, formatDuration, normalizePerformanceSnapshot, readTimerState, timerElapsed, toggleTimer } from './companionRuntime.js';
 import { hasDeckUpdate, installedRevision, localDeck, mergeCatalogWithInstalled, parsePortableDeck, portableDeck, serializeDeck } from './deckPortability.js';
 import { createDiagnosticReport, diagnosticChecks, diagnosticDeck, diagnosticProgress, normalizeDiagnosticDisplayState, readDiagnosticConfirmations, setDiagnosticConfirmation } from './deviceDiagnostics.js';
@@ -37,6 +37,46 @@ function catalogSourceUrl(deck) {
   if (!repository || !/^[A-Za-z0-9._/-]{1,160}$/.test(ref) || !/^[A-Za-z0-9._/-]{1,300}$/.test(sourcePath)) return null;
   const encodedPath = sourcePath.split('/').map(encodeURIComponent).join('/');
   return `${repository.replace(/\/$/, '')}/blob/${encodeURIComponent(ref)}/${encodedPath}`;
+}
+
+const permissionDetails = {
+  'external-display': ['Second display', 'Show this Deck on a connected lower screen only when you launch it.'],
+  network: ['Reviewed links', 'Open only the HTTP(S) sources listed below in your external browser.'],
+  performance: ['Device status', 'Read local battery, thermal, memory, and display refresh-rate values.'],
+  keyboard: ['Input references', 'Show keyboard or trackpad reference widgets. Format v1 cannot inject input into another app.']
+};
+
+function deckIdentity(deck) {
+  return String(deck?.channelId || deck?.id || '');
+}
+
+function reviewDeckPermissions(deck) {
+  document.querySelector('#deck-permission-dialog')?.remove();
+  const permissions = requiredDeckPermissions(deck);
+  const dialog = document.createElement('dialog');
+  dialog.id = 'deck-permission-dialog';
+  dialog.className = 'deck-dialog permission-dialog';
+  const targets = (deck.target?.packageNames || []).map((name) => `<code>${escapeHtml(name)}</code>`).join('');
+  const sources = (deck.sources || []).map((source) => `<li>${escapeHtml(source)}</li>`).join('');
+  dialog.innerHTML = `<form method="dialog"><span class="section-num">DEVICE-LOCAL CONSENT · v${escapeHtml(deck.version || 1)}</span><h2>Review ${escapeHtml(deck.name)}</h2><p>SecondDeck stores these approvals only on this device. Updating a Deck requires a fresh review, and you can revoke access later.</p><div class="permission-targets"><small>Exact app targets</small><div>${targets || '<span>None declared</span>'}</div></div><fieldset class="permission-list"><legend>Requested capabilities</legend>${permissions.map((permission) => { const [name, description] = permissionDetails[permission]; return `<label><input type="checkbox" name="permission" value="${escapeHtml(permission)}"><span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(description)}</small></span></label>`; }).join('')}</fieldset>${sources ? `<div class="permission-sources"><small>Reviewed public sources</small><ul>${sources}</ul></div>` : ''}${deck.ai?.enabled ? `<div class="permission-note">${icon('spark')} This Deck allows optional AI authoring help. AI cannot read the running game, notes, or device telemetry.</div>` : ''}<div class="permission-actions"><button class="button ghost" value="cancel">Cancel</button><button class="button" value="approve" ${permissions.length ? 'disabled' : ''}>Approve and install</button></div></form>`;
+  document.body.append(dialog);
+  const approve = dialog.querySelector('[value="approve"]');
+  dialog.addEventListener('change', () => { approve.disabled = dialog.querySelectorAll('input[name="permission"]:checked').length !== permissions.length; });
+  return new Promise((resolve) => {
+    dialog.addEventListener('close', () => {
+      const approved = dialog.returnValue === 'approve' ? [...dialog.querySelectorAll('input[name="permission"]:checked')].map((input) => input.value) : null;
+      dialog.remove(); resolve(approved);
+    }, { once: true });
+    dialog.showModal();
+  });
+}
+
+async function installWithPermissionReview(deck) {
+  const approved = await reviewDeckPermissions(deck);
+  if (!approved) return false;
+  state.installed = installDeck(deck, undefined, approved);
+  state.activeDeck = activeDeck();
+  return true;
 }
 
 function widgetMarkup(widget, index) {
@@ -138,7 +178,7 @@ function home() {
     <section class="hero"><div class="eyebrow"><span></span> Built first for AYN Thor</div>
       <h1>Your game up top.<br><em>Everything else below.</em></h1>
       <p class="lede">SecondDeck turns the screen you are not playing on into a living companion—maps, guides, notes, persistent timers, read-only device telemetry, and community-built Decks that stay out of your way.</p>
-      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="${obtainiumImportUrl()}">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.9.0.apk'}">Download APK</a></div>
+      <div class="hero-actions"><a class="button" href="#/login">${icon('layers')} Open the app</a><a class="button ghost" href="${obtainiumImportUrl()}">${icon('download')} Add to Obtainium</a><a class="button ghost" href="${state.config?.downloadUrl || '/downloads/seconddeck-v0.10.0.apk'}">Download APK</a></div>
       <p class="obtainium">On your Thor? Use <strong>Add to Obtainium</strong> so the source is saved as SecondDeck. Obtainium shows the embedded dual-screen logo after the first install.</p>
       <div class="device"><div class="screen screen-top"><div class="game-art"><span>NOW PLAYING</span><strong>YOUR GAME</strong></div></div><div class="hinge"></div><div class="screen screen-bottom"><div class="deck-preview"><div class="mini-card teal">ROUTE<small>North ridge → tower</small></div><div class="mini-card amber">TIMER<small>01:42:18</small></div><div class="mini-card wide">SESSION NOTES<small>Key found · East gate unlocked</small></div></div></div></div>
     </section>
@@ -190,6 +230,8 @@ function deckCard(deck) {
   const localRevision = installedRevision(deck, state.installed);
   const installed = Boolean(localRevision);
   const updateAvailable = hasDeckUpdate(deck, state.installed);
+  const permissionGranted = installed && !updateAvailable && deckPermissionsGranted(deck);
+  const needsReview = installed && !updateAvailable && !permissionGranted;
   const active = installedRevision(deck, state.activeDeck ? [state.activeDeck] : []) !== null;
   const canReview = state.user?.aiProvider === 'codex';
   const catalogUrl = catalogSourceUrl(deck);
@@ -202,6 +244,8 @@ function deckCard(deck) {
       ? `<span class="review-note">${escapeHtml(deck.status)}</span>`
     : updateAvailable
       ? `<button class="text-button" data-action="install" data-deck-id="${escapeHtml(deck.id)}">Update to v${escapeHtml(deck.version || 1)} ↓</button>`
+    : needsReview
+      ? `<button class="text-button" data-action="permissions" data-deck-id="${escapeHtml(deck.id)}">Review permissions →</button>`
     : active
       ? state.yieldedPackage
         ? '<button class="text-button active-action" disabled>Yielding to current app</button>'
@@ -209,15 +253,16 @@ function deckCard(deck) {
       : installed
         ? `<button class="text-button" data-action="activate" data-deck-id="${escapeHtml(deck.id)}">Use on second screen →</button>`
         : `<button class="text-button" data-action="install" data-deck-id="${escapeHtml(deck.id)}">Install locally ↓</button>`;
-  return `<article class="deck-card" data-deck-search="${escapeHtml([view.name, view.description, deck.publisher, ...(deck.target?.packageNames || [])].join(' ').toLowerCase())}"><div class="deck-art ${packageIcon ? 'has-package-icon' : ''}">${packageIcon ? `<img src="${packageIcon}" alt="" loading="lazy">` : ''}<div>${widgetNames}</div></div><div class="deck-copy"><small>${escapeHtml(view.target.platforms.join(' · '))} · v${escapeHtml(deck.version || 1)}${deck.publisher ? ` · ${escapeHtml(deck.publisher)}` : ''}${locale}</small><h3>${escapeHtml(view.name)}</h3><p>${escapeHtml(view.description)}</p><div><span class="status ${escapeHtml(updateAvailable ? 'update' : deck.status)}">${updateAvailable ? 'update available' : active ? 'active' : installed ? 'installed' : escapeHtml(deck.status)}</span><button class="text-button" data-action="preview" data-deck-id="${escapeHtml(deck.id)}">Preview</button>${catalogUrl ? `<a class="text-button" href="${escapeHtml(catalogUrl)}" target="_blank" rel="noopener noreferrer">GitHub source ↗</a>` : ''}</div><div class="deck-action">${action}</div></div></article>`;
+  return `<article class="deck-card" data-deck-search="${escapeHtml([view.name, view.description, deck.publisher, ...(deck.target?.packageNames || [])].join(' ').toLowerCase())}"><div class="deck-art ${packageIcon ? 'has-package-icon' : ''}">${packageIcon ? `<img src="${packageIcon}" alt="" loading="lazy">` : ''}<div>${widgetNames}</div></div><div class="deck-copy"><small>${escapeHtml(view.target.platforms.join(' · '))} · v${escapeHtml(deck.version || 1)}${deck.publisher ? ` · ${escapeHtml(deck.publisher)}` : ''}${locale}</small><h3>${escapeHtml(view.name)}</h3><p>${escapeHtml(view.description)}</p><div><span class="status ${escapeHtml(updateAvailable ? 'update' : needsReview ? 'review' : deck.status)}">${updateAvailable ? 'update available' : needsReview ? 'permission review' : active ? 'active' : installed ? 'installed' : escapeHtml(deck.status)}</span><button class="text-button" data-action="preview" data-deck-id="${escapeHtml(deck.id)}">Preview</button>${catalogUrl ? `<a class="text-button" href="${escapeHtml(catalogUrl)}" target="_blank" rel="noopener noreferrer">GitHub source ↗</a>` : ''}</div><div class="deck-action">${action}</div></div></article>`;
 }
 
 async function appPage() {
   if (!(await ensureUser())) return;
   const runtimeMessage = state.yieldedPackage ? `Yielding to ${state.yieldedPackage}; SecondDeck will not use its lower screen` : state.detectedDeck ? `${state.detectedDeck.name} matched to ${state.display.foregroundPackage}` : state.display?.foregroundPackage ? `No installed Deck matches ${state.display.foregroundPackage}` : state.display?.usageAccessGranted ? 'Waiting for a supported game' : state.display?.native ? 'Game detection is off' : 'Web preview';
   const canLaunch = Boolean(state.activeDeck && !state.yieldedPackage);
+  const readyCount = state.installed.filter((deck) => deckPermissionsGranted(deck)).length;
   root.innerHTML = pageShell(`<main class="dashboard"><section class="dash-head"><div><span class="eyebrow"><span></span> ${escapeHtml(state.user.email)}</span><h1>Your second screen,<br>ready when you are.</h1></div><button class="button" data-action="display" ${canLaunch ? '' : 'disabled'}>${state.yieldedPackage ? 'Yielding to current app' : state.activeDeck ? `Launch ${escapeHtml(state.activeDeck.name)}` : 'Install a Deck to launch'}</button></section>
-    <div class="device-status" id="device-status"><span class="pulse"></span><strong>${state.yieldedPackage ? 'Current app owns both screens' : state.offline ? 'Offline library ready' : state.display?.companionVisible ? 'Companion is running' : state.display?.isExtended ? 'Second display detected' : 'Ready for a second display'}</strong><span>${escapeHtml(runtimeMessage)} · ${state.installed.length} installed · ${state.decks.length} available</span><span class="device-actions"><a class="text-button" href="#/diagnostics">Run Thor check</a>${state.display?.native && !state.display?.usageAccessGranted ? '<button class="text-button" data-action="usage-access">Enable game detection</button>' : ''}${state.display?.foregroundPackage ? state.yieldedPackage ? '<button class="text-button" data-action="allow-package">Allow companion for this app</button>' : '<button class="text-button" data-action="yield-package">Always yield for this app</button>' : ''}${state.display?.companionVisible ? '<button class="text-button stop" data-action="stop-display">Stop companion</button>' : ''}</span></div>
+    <div class="device-status" id="device-status"><span class="pulse"></span><strong>${state.yieldedPackage ? 'Current app owns both screens' : state.offline ? 'Offline library ready' : state.display?.companionVisible ? 'Companion is running' : state.display?.isExtended ? 'Second display detected' : 'Ready for a second display'}</strong><span>${escapeHtml(runtimeMessage)} · ${readyCount} ready of ${state.installed.length} installed · ${state.decks.length} available</span><span class="device-actions"><a class="text-button" href="#/diagnostics">Run Thor check</a>${state.display?.native && !state.display?.usageAccessGranted ? '<button class="text-button" data-action="usage-access">Enable game detection</button>' : ''}${state.display?.foregroundPackage ? state.yieldedPackage ? '<button class="text-button" data-action="allow-package">Allow companion for this app</button>' : '<button class="text-button" data-action="yield-package">Always yield for this app</button>' : ''}${state.display?.companionVisible ? '<button class="text-button stop" data-action="stop-display">Stop companion</button>' : ''}</span></div>
     <section><div class="section-title"><div><span class="section-num">COMMUNITY LIBRARY</span><h2>Reviewed and local Decks</h2></div><div class="library-actions"><button class="button ghost small" data-action="import-deck">Import JSON/YAML</button><a class="button ghost small" href="#/create">${icon('plus')} Create Deck</a><input id="deck-import" type="file" accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml" hidden></div></div><label class="library-search">Find a game or Deck<input id="deck-search" type="search" placeholder="Search name, description, or package…"></label><div class="deck-grid">${state.decks.map(deckCard).join('') || '<p class="empty-library">You are offline. Installed Decks remain available after the catalog reconnects.</p>'}</div></section></main>`, true);
   document.querySelector('#deck-search')?.addEventListener('input', filterDecks);
 }
@@ -274,9 +319,12 @@ function previewDeck(deck) {
   dialog.id = 'deck-preview-dialog';
   dialog.className = 'deck-dialog';
   const installed = installedRevision(deck, state.installed);
+  const exactInstalled = Boolean(installed && Number(installed.version || 1) === Number(deck.version || 1));
+  const permissionGranted = exactInstalled && deckPermissionsGranted(deck);
   const view = localizedDeck(deck);
   const readmeUrl = safeSourceUrl(deck.package?.readmeUrl);
-  dialog.innerHTML = `<button class="dialog-close" data-action="close-preview" aria-label="Close preview">×</button><span class="section-num">DECLARATIVE PREVIEW · v${escapeHtml(deck.version || 1)}${view.activeLocale ? ` · ${escapeHtml(view.activeLocale)}` : ''}</span><h2>${escapeHtml(view.name)}</h2><p>${escapeHtml(view.description)}</p>${deck.package ? `<p class="package-meta">${escapeHtml(deck.package.license)} license · ${escapeHtml((deck.package.availableLocales || [deck.package.defaultLocale]).join(', '))}${readmeUrl ? ` · <a href="${escapeHtml(readmeUrl)}" target="_blank" rel="noopener noreferrer">Package README ↗</a>` : ''}</p>` : ''}<div class="preview-widgets">${view.layout.widgets.map((widget) => `<article><small>${escapeHtml(widget.type)}</small><strong>${escapeHtml(widget.title)}</strong>${widget.content ? `<p>${escapeHtml(widget.content).replace(/\n/g, '<br>')}</p>` : ''}</article>`).join('')}</div><footer><span>${escapeHtml(view.target.packageNames.join(' · '))}</span><span>${view.layout.breakpoints?.[0]?.columns || view.layout.columns} wide-screen column${(view.layout.breakpoints?.[0]?.columns || view.layout.columns) === 1 ? '' : 's'}</span><span class="dialog-actions"><button class="text-button" data-action="export-deck" data-deck-id="${escapeHtml(deck.id)}">Export JSON ↓</button>${deck.status === 'local' && !installed ? `<button class="text-button" data-action="install-preview" data-deck-id="${escapeHtml(deck.id)}">Install locally ↓</button>` : ''}${installed ? `<button class="text-button danger" data-action="uninstall" data-deck-id="${escapeHtml(installed.id)}">Remove local copy</button>` : ''}</span></footer>`;
+  const permissions = requiredDeckPermissions(deck).map((permission) => `<span>${escapeHtml(permissionDetails[permission]?.[0] || permission)}</span>`).join('');
+  dialog.innerHTML = `<button class="dialog-close" data-action="close-preview" aria-label="Close preview">×</button><span class="section-num">DECLARATIVE PREVIEW · v${escapeHtml(deck.version || 1)}${view.activeLocale ? ` · ${escapeHtml(view.activeLocale)}` : ''}</span><h2>${escapeHtml(view.name)}</h2><p>${escapeHtml(view.description)}</p>${deck.package ? `<p class="package-meta">${escapeHtml(deck.package.license)} license · ${escapeHtml((deck.package.availableLocales || [deck.package.defaultLocale]).join(', '))}${readmeUrl ? ` · <a href="${escapeHtml(readmeUrl)}" target="_blank" rel="noopener noreferrer">Package README ↗</a>` : ''}</p>` : ''}<div class="permission-summary"><small>Requests</small>${permissions}</div><div class="preview-widgets">${view.layout.widgets.map((widget) => `<article><small>${escapeHtml(widget.type)}</small><strong>${escapeHtml(widget.title)}</strong>${widget.content ? `<p>${escapeHtml(widget.content).replace(/\n/g, '<br>')}</p>` : ''}</article>`).join('')}</div><footer><span>${escapeHtml(view.target.packageNames.join(' · '))}</span><span>${view.layout.breakpoints?.[0]?.columns || view.layout.columns} wide-screen column${(view.layout.breakpoints?.[0]?.columns || view.layout.columns) === 1 ? '' : 's'}</span><span class="dialog-actions"><button class="text-button" data-action="export-deck" data-deck-id="${escapeHtml(deck.id)}">Export JSON ↓</button>${deck.status === 'local' && !installed ? `<button class="text-button" data-action="install-preview" data-deck-id="${escapeHtml(deck.id)}">Install locally ↓</button>` : ''}${exactInstalled ? permissionGranted ? `<button class="text-button danger" data-action="revoke-permissions" data-deck-id="${escapeHtml(deck.id)}">Revoke permissions</button>` : `<button class="text-button" data-action="permissions" data-deck-id="${escapeHtml(deck.id)}">Review permissions</button>` : ''}${installed ? `<button class="text-button danger" data-action="uninstall" data-deck-id="${escapeHtml(installed.id)}">Remove local copy</button>` : ''}</span></footer>`;
   document.body.append(dialog);
   dialog.showModal();
 }
@@ -357,6 +405,7 @@ async function ensureUser() {
     state.decks = mergeCatalogWithInstalled([], state.installed);
   }
   state.detectedDeck = deckForPackage(state.display?.foregroundPackage, state.installed);
+  if (state.detectedDeck && !deckPermissionsGranted(state.detectedDeck)) state.detectedDeck = null;
   state.yieldedPackage = shouldYieldForPackage(state.display?.foregroundPackage) ? state.display.foregroundPackage : null;
   if (state.yieldedPackage) state.detectedDeck = null;
   if (state.detectedDeck && state.activeDeck?.id !== state.detectedDeck.id) state.activeDeck = setActiveDeck(state.detectedDeck.id);
@@ -371,6 +420,7 @@ async function launchCompanion(deck) {
     throw new Error(`SecondDeck is yielding to ${packageName}. Allow the companion for this app first.`);
   }
   if (!deck) throw new Error('Install and select a Deck before launching.');
+  if (!deckPermissionsGranted(deck)) throw new Error('Review this Deck\'s permissions before launching it.');
   await openCompanionDisplay(deck);
 }
 
@@ -396,8 +446,9 @@ document.addEventListener('click', async (event) => {
   if (action === 'install-preview') {
     const deck = findDeck(event.target.closest('[data-deck-id]').dataset.deckId);
     if (deck?.status === 'local') {
-      state.installed = installDeck(deck); state.activeDeck = activeDeck();
-      document.querySelector('#deck-preview-dialog')?.remove(); location.hash = '#/app';
+      if (await installWithPermissionReview(deck)) {
+        document.querySelector('#deck-preview-dialog')?.remove(); location.hash = '#/app';
+      }
     }
   }
   if (action === 'preview-draft' || action === 'install-draft') {
@@ -405,7 +456,7 @@ document.addEventListener('click', async (event) => {
     try {
       const deck = localDeck(deckFromForm(form), 'Local draft');
       if (action === 'preview-draft') { previewDeck(deck); status.textContent = 'Previewing a validated local draft.'; }
-      else { state.installed = installDeck(deck); state.activeDeck = activeDeck(); location.hash = '#/app'; }
+      else if (await installWithPermissionReview(deck)) location.hash = '#/app';
     } catch (error) { if (status) status.textContent = error.message; }
   }
   if (action === 'usage-access') {
@@ -443,7 +494,18 @@ document.addEventListener('click', async (event) => {
   if (action === 'preview') { const deck = findDeck(event.target.closest('[data-deck-id]').dataset.deckId); if (deck) previewDeck(deck); }
   if (action === 'install') {
     const deck = findDeck(event.target.closest('[data-deck-id]').dataset.deckId);
-    if (deck?.status === 'published') { state.installed = installDeck(deck); state.activeDeck = activeDeck(); await appPage(); }
+    if (deck?.status === 'published' && await installWithPermissionReview(deck)) await appPage();
+  }
+  if (action === 'permissions') {
+    const deck = findDeck(event.target.closest('[data-deck-id]').dataset.deckId);
+    if (deck) {
+      const approved = await reviewDeckPermissions(deck);
+      if (approved) { grantDeckPermissions(deck, approved); state.activeDeck = activeDeck(); document.querySelector('#deck-preview-dialog')?.remove(); await appPage(); }
+    }
+  }
+  if (action === 'revoke-permissions') {
+    const deck = findDeck(event.target.closest('[data-deck-id]').dataset.deckId);
+    if (deck) { revokeDeckPermissions(deckIdentity(deck)); state.activeDeck = activeDeck(); document.querySelector('#deck-preview-dialog')?.remove(); await appPage(); }
   }
   if (action === 'review') {
     const button = event.target.closest('[data-deck-id]');
@@ -479,10 +541,11 @@ document.addEventListener('change', async (event) => {
   const status = document.querySelector('#device-status strong');
   try {
     const deck = localDeck(parsePortableDeck(await file.text()));
-    state.installed = installDeck(deck); state.activeDeck = activeDeck();
-    await appPage();
-    const refreshed = document.querySelector('#device-status strong');
-    if (refreshed) refreshed.textContent = `${deck.name} imported and validated locally`;
+    if (await installWithPermissionReview(deck)) {
+      await appPage();
+      const refreshed = document.querySelector('#device-status strong');
+      if (refreshed) refreshed.textContent = `${deck.name} imported, approved, and validated locally`;
+    }
   } catch (error) { if (status) status.textContent = error.message; }
   finally { event.target.value = ''; }
 });
